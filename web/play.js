@@ -142,3 +142,13 @@ $("join-new").addEventListener("click", () => {
 });
 $("make-answer").addEventListener("click", () =>
   room.join($("host-invite").value).then((code) => { $("my-answer").value = code; }).catch((e) => log("error: " + e.message, "err")));
+
+// Diagnostic: start the engine with no game files to see how far it gets.
+if (params.has("bare")) {
+  (async () => {
+    log("bare start: webgpu=" + !!navigator.gpu + " isolated=" + self.crossOriginIsolated);
+    await init();
+    document.body.classList.add("running");
+    run();
+  })().catch((e) => log("error: " + e, "err"));
+}
