@@ -152,3 +152,28 @@ if (params.has("bare")) {
     run();
   })().catch((e) => log("error: " + e, "err"));
 }
+
+// Diagnostic: host and guest in one tab, exchange codes, ping both channels.
+if (params.has("rtctest")) {
+  (async () => {
+    const host = new Host(), guest = new Guest();
+    const t0 = performance.now();
+    const seen = new Set();
+    const enc = new TextEncoder(), dec = new TextDecoder();
+    host.onMessage = (id, lane, b) => { seen.add("host<-" + lane + ":" + dec.decode(b)); log("host got " + lane + " " + dec.decode(b)); };
+    guest.onMessage = (id, lane, b) => { log("guest got " + lane + " " + dec.decode(b)); guest.send(0, lane, enc.encode("pong")); };
+    host.onOpen = async (id) => {
+      log("RTCTEST open after " + Math.round(performance.now() - t0) + " ms");
+      host.send(id, "control", enc.encode("ping"));
+      host.send(id, "data", enc.encode("ping"));
+      log("RTCTEST path " + await host.path(id));
+    };
+    const { member, code } = await host.invite();
+    log("RTCTEST invite " + code.length + " chars");
+    const answer = await guest.join(code);
+    log("RTCTEST answer " + answer.length + " chars");
+    await host.accept(member, answer);
+    await new Promise((r) => setTimeout(r, 6000));
+    log("RTCTEST result " + (seen.has("host<-control:pong") && seen.has("host<-data:pong") ? "PASS" : "FAIL " + [...seen]));
+  })().catch((e) => log("RTCTEST error: " + e, "err"));
+}
