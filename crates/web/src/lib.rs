@@ -21,6 +21,16 @@ mod entry {
     /// Start the main menu on the canvas `#iw4l-canvas`.
     #[wasm_bindgen]
     pub fn run() {
+        start(bootstrap::LaunchMode::Menu);
+    }
+
+    /// Start straight on a map (for example `mp_rust`).
+    #[wasm_bindgen]
+    pub fn run_map(map: &str) {
+        start(bootstrap::LaunchMode::Map(map.to_owned()));
+    }
+
+    fn start(mode: bootstrap::LaunchMode) {
         console_error_panic_hook::set_once();
         diag::set_console_sink(|line| web_sys::console::log_1(&line.into()));
         let artifacts = PathBuf::from("/iw4l-artifacts");
@@ -29,7 +39,7 @@ mod entry {
         bootstrap::launch(
             asset_transport::GamesRoot(PathBuf::from(GAMES)),
             artifacts,
-            bootstrap::LaunchMode::Menu,
+            mode,
             None,
             sim::HostCheats::default(),
         );

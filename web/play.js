@@ -1,6 +1,6 @@
 import { enableTouch } from "./touch.js";
 import { Host, Guest, describePath } from "./rtc.js";
-import init, { mount_shard, run } from "./pkg/iw4l_web.js";
+import init, { mount_shard, run, run_map } from "./pkg/iw4l_web.js";
 
 const GAME_DIR = "Call of Duty Modern Warfare 2";
 const $ = (id) => document.getElementById(id);
@@ -76,7 +76,7 @@ async function start() {
   document.body.classList.add("running");
   $("iw4l-canvas").focus();
   enableTouch({ force: params.has("touch") });
-  run();
+  if (params.has("launch")) run_map(params.get("launch")); else run();
 }
 
 $("start").addEventListener("click", () => start().catch((e) => log("error: " + e, "err")));
