@@ -1,8 +1,9 @@
+use web_time::Instant;
 use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     path::{Path, PathBuf},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use bevy::prelude::*;
