@@ -1,11 +1,8 @@
 use std::{fmt, sync::Arc};
 
 use master_protocol::MemberId;
-use ring::{
-    digest::{self, SHA256},
-    rand::{SecureRandom, SystemRandom},
-    signature::{self, Ed25519KeyPair, KeyPair},
-};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use sha2::{Digest, Sha256};
 use sim::AccountId;
 
 use crate::ConnectionId;
@@ -20,7 +17,7 @@ pub enum AccountIdentityError {
 
 struct KeyMaterial {
     seed: [u8; 32],
-    pair: Ed25519KeyPair,
+    pair: SigningKey,
 }
 
 #[derive(Clone)]
@@ -39,8 +36,7 @@ impl AccountKey {
     pub fn generate() -> Result<Self, AccountIdentityError> {
         let mut seed = [0; 32];
         while seed == [0; 32] {
-            SystemRandom::new()
-                .fill(&mut seed)
+            getrandom::fill(&mut seed)
                 .map_err(|_| AccountIdentityError::Entropy)?;
         }
         Self::from_seed(seed)
@@ -50,8 +46,7 @@ impl AccountKey {
         if seed == [0; 32] {
             return Err(AccountIdentityError::InvalidKey);
         }
-        let pair = Ed25519KeyPair::from_seed_unchecked(&seed)
-            .map_err(|_| AccountIdentityError::InvalidKey)?;
+        let pair = SigningKey::from_bytes(&seed);
         Ok(Self(Arc::new(KeyMaterial { seed, pair })))
     }
 
@@ -60,7 +55,7 @@ impl AccountKey {
     }
 
     pub fn public_key(&self) -> [u8; 32] {
-        self.0.pair.public_key().as_ref().try_into().unwrap()
+        self.0.pair.verifying_key().to_bytes()
     }
 
     pub fn account(&self) -> AccountId {
@@ -76,9 +71,7 @@ impl AccountKey {
                 .0
                 .pair
                 .sign(&proof_message(challenge, account, payload))
-                .as_ref()
-                .try_into()
-                .unwrap(),
+                .to_bytes(),
         }
     }
 }
@@ -106,8 +99,7 @@ impl AccountChallenge {
         }
         let mut nonce = [0; 32];
         while nonce == [0; 32] {
-            SystemRandom::new()
-                .fill(&mut nonce)
+            getrandom::fill(&mut nonce)
                 .map_err(|_| AccountIdentityError::Entropy)?;
         }
         Ok(Self {
@@ -135,21 +127,23 @@ impl AccountProof {
         if self.account.0 == [0; 16] || account_from_public_key(&self.public_key) != self.account {
             return Err(AccountIdentityError::InvalidProof);
         }
-        signature::UnparsedPublicKey::new(&signature::ED25519, self.public_key)
-            .verify(
-                &proof_message(challenge, self.account, payload),
-                &self.signature,
-            )
+        VerifyingKey::from_bytes(&self.public_key)
+            .and_then(|key| {
+                key.verify(
+                    &proof_message(challenge, self.account, payload),
+                    &Signature::from_bytes(&self.signature),
+                )
+            })
             .map_err(|_| AccountIdentityError::InvalidProof)?;
         Ok(self.account)
     }
 }
 
 fn account_from_public_key(public_key: &[u8; 32]) -> AccountId {
-    let mut hash = digest::Context::new(&SHA256);
+    let mut hash = Sha256::new();
     hash.update(b"IW4L account identity v1\0");
     hash.update(public_key);
-    AccountId(hash.finish().as_ref()[..16].try_into().unwrap())
+    AccountId(hash.finalize()[..16].try_into().unwrap())
 }
 
 fn proof_message(challenge: &AccountChallenge, account: AccountId, payload: &[u8]) -> Vec<u8> {
@@ -161,6 +155,50 @@ fn proof_message(challenge: &AccountChallenge, account: AccountId, payload: &[u8
     message.extend_from_slice(&challenge.member.0);
     message.extend_from_slice(&challenge.nonce);
     message.extend_from_slice(&account.0);
-    message.extend_from_slice(digest::digest(&SHA256, payload).as_ref());
+    message.extend_from_slice(&Sha256::digest(payload));
     message
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hex(s: &str) -> Vec<u8> {
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
+    }
+
+    /// Accounts persisted by the `ring`-backed build must keep their identity:
+    /// the same seed has to give the RFC 8032 public key.
+    #[test]
+    fn seed_matches_rfc8032_vector() {
+        let seed: [u8; 32] = hex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+            .try_into()
+            .unwrap();
+        let key = AccountKey::from_seed(seed).unwrap();
+        assert_eq!(
+            key.public_key().to_vec(),
+            hex("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
+        );
+        assert_eq!(key.export_seed(), seed);
+    }
+
+    #[test]
+    fn proof_round_trips() {
+        let key = AccountKey::generate().unwrap();
+        let challenge = AccountChallenge::new(
+            frame::MatchKey {
+                session_id: [7; 16],
+                match_epoch: 1,
+            },
+            ConnectionId(3),
+            MemberId([9; 16]),
+        )
+        .unwrap();
+        let proof = key.prove(&challenge, b"payload");
+        assert_eq!(proof.verify(&challenge, b"payload"), Ok(key.account()));
+        assert!(proof.verify(&challenge, b"other").is_err());
+    }
 }

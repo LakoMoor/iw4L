@@ -82,6 +82,11 @@ impl Default for FolderPicks {
 }
 
 impl FolderPicks {
+    /// The browser has no native folder dialog; its page hands the folder over.
+    #[cfg(target_arch = "wasm32")]
+    fn open_dialog(&self, _game: OtherGame, _start: Option<PathBuf>) {}
+
+    #[cfg(not(target_arch = "wasm32"))]
     fn open_dialog(&self, game: OtherGame, start: Option<PathBuf>) {
         if self.dialog_open.swap(true, Ordering::AcqRel) {
             return;

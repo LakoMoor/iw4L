@@ -5,10 +5,11 @@ use bevy::{
     prelude::*,
     render::{
         RenderPlugin as BevyRenderPlugin,
-        pipelined_rendering::PipelinedRenderingPlugin,
         settings::{RenderCreation, WgpuFeatures, WgpuSettings},
     },
 };
+#[cfg(not(target_arch = "wasm32"))]
+use bevy::render::pipelined_rendering::PipelinedRenderingPlugin;
 use bots::BotsPlugin;
 use console::ConsolePlugin;
 use frame::RuntimeRole;
@@ -117,6 +118,12 @@ pub fn default_plugins_with_quiet_log(mut window: WindowPlugin) -> bevy::app::Pl
             render_creation: RenderCreation::Automatic(Box::new(wgpu)),
             ..default()
         });
+    // The browser renders on the main thread; the plugin does not exist there.
+    #[cfg(target_arch = "wasm32")]
+    {
+        plugins
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     if pipelined_rendering() {
         plugins
     } else {

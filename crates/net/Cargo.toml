@@ -8,7 +8,6 @@ description = "Our wire: frames, deltas, prediction, interpolation. Not retail's
 [dependencies]
 updater = { path = "../updater" }
 structured_data_iw4.workspace = true
-ring = "0.17.14"
 diag.workspace = true
 math_iw4.workspace = true
 frame.workspace = true
@@ -26,11 +25,20 @@ hud_iw4.workspace = true
 perf.workspace = true
 bevy.workspace = true
 master_protocol.workspace = true
+tokio = { version = "1.47", default-features = false, features = ["macros", "sync", "time", "rt"] }
+tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
+sha2.workspace = true
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+getrandom = "0.3"
+zstd = { version = "0.13", default-features = false }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 quinn = { version = "0.11.11", default-features = false, features = ["runtime-tokio", "rustls-ring"] }
 rustls = { version = "0.23.31", default-features = false, features = ["ring", "std"] }
-tokio = { version = "1.47", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }
-tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
-zstd = { version = "0.13", default-features = false }
+tokio = { version = "1.47", features = ["net", "rt-multi-thread"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [lints]
 workspace = true

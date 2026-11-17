@@ -14,6 +14,7 @@ use master_protocol::{
     SESSION_IDLE, SessionCloseReason, decode_relay, decode_relay_stream, decode_stream_payload,
     encode_relay, encode_relay_stream, encode_stream_frame, stream_frame_len,
 };
+#[cfg(not(target_arch = "wasm32"))]
 use quinn::crypto::rustls::QuicClientConfig;
 use tokio_util::sync::CancellationToken;
 
@@ -316,6 +317,7 @@ impl TransportFault {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn with_connection(
         operation: &'static str,
         role: &'static str,
@@ -1230,6 +1232,7 @@ fn apply_master_menu_action(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn browser_worker(
     target: MasterTarget,
     state: Arc<Mutex<MasterBrowserSnapshot>>,
@@ -1270,6 +1273,20 @@ fn browser_worker(
     });
 }
 
+/// The browser build has no central master to browse: peers connect through
+/// serverless WebRTC invitations instead.
+#[cfg(target_arch = "wasm32")]
+fn browser_worker(
+    _target: MasterTarget,
+    state: Arc<Mutex<MasterBrowserSnapshot>>,
+    _refresh: Arc<AtomicU64>,
+    _cancel: CancellationToken,
+) {
+    state.lock().expect("master browser state poisoned").error =
+        Some("the master browser is not available in the browser build".into());
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 async fn browse(
     target: &MasterTarget,
     state: &Mutex<MasterBrowserSnapshot>,
@@ -1535,12 +1552,13 @@ fn apply_master_lifecycle(
 }
 
 pub fn register_master_bridge(app: &mut App) {
-    app.init_resource::<PendingMasterMenuAction>()
-        .add_systems(
-            Update,
-            population::poll_communities.in_set(crate::ClientSet::Load),
-        )
-        .add_systems(
+    app.init_resource::<PendingMasterMenuAction>();
+    #[cfg(not(target_arch = "wasm32"))]
+    app.add_systems(
+        Update,
+        population::poll_communities.in_set(crate::ClientSet::Load),
+    );
+    app.add_systems(
             Update,
             (arm_master_browser, apply_master_menu_action)
                 .chain()
@@ -1840,12 +1858,23 @@ fn execute_host_match_effects(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn session_worker(kind: SessionKind, ctx: WorkerCtx) -> std::result::Result<(), TransportFault> {
     let runtime = blocking_runtime()
         .map_err(|error| TransportFault::new("runtime", ctx.role, error.to_string()))?;
     runtime.block_on(session_main(kind, ctx))
 }
 
+#[cfg(target_arch = "wasm32")]
+fn session_worker(_kind: SessionKind, ctx: WorkerCtx) -> std::result::Result<(), TransportFault> {
+    Err(TransportFault::new(
+        "transport",
+        ctx.role,
+        "the QUIC master transport is not available in the browser build",
+    ))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 async fn session_main(
     kind: SessionKind,
     ctx: WorkerCtx,
@@ -3253,6 +3282,7 @@ fn pump_local_queues(
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn bootstrap_egress(
     connection: quinn::Connection,
     mut jobs: tokio::sync::mpsc::Receiver<BootstrapJob>,
@@ -3301,6 +3331,7 @@ async fn bootstrap_egress(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn datagram_ingress(
     connection: quinn::Connection,
     mailbox: RelayMailbox,
@@ -3368,6 +3399,7 @@ async fn datagram_ingress(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn uni_ingress(
     connection: quinn::Connection,
     bootstrap: Arc<BootstrapLane>,
@@ -3437,6 +3469,7 @@ async fn uni_ingress(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn gameplay_egress(
     connection: quinn::Connection,
     mailbox: RelayMailbox,
@@ -3543,6 +3576,7 @@ async fn gameplay_egress(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn send_bootstrap_stream(
     connection: &quinn::Connection,
     member_id: MemberId,
@@ -3585,6 +3619,7 @@ async fn send_bootstrap_stream(
     })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn read_transfer(recv: &mut quinn::RecvStream) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
     loop {
@@ -3602,6 +3637,7 @@ async fn read_transfer(recv: &mut quinn::RecvStream) -> Result<Vec<u8>> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn write_transfer(send: &mut quinn::SendStream, bytes: &[u8]) -> Result<()> {
     let mut offset = 0;
     while offset < bytes.len() {
@@ -3625,6 +3661,7 @@ async fn write_transfer(send: &mut quinn::SendStream, bytes: &[u8]) -> Result<()
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn read_owned_frame(
     mut recv: quinn::RecvStream,
 ) -> (quinn::RecvStream, Result<ControlFrame>) {
@@ -3632,6 +3669,7 @@ async fn read_owned_frame(
     (recv, frame)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn read_frame(recv: &mut quinn::RecvStream) -> Result<ControlFrame> {
     let mut header = [0_u8; 4];
     recv.read_exact(&mut header).await?;
@@ -3641,6 +3679,7 @@ async fn read_frame(recv: &mut quinn::RecvStream) -> Result<ControlFrame> {
     Ok(decode_stream_payload(&body)?)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn write_frame(send: &mut quinn::SendStream, frame: &ControlFrame) -> Result<()> {
     tokio::time::timeout(
         limits::values().response,
@@ -3663,6 +3702,7 @@ async fn cancellable<T>(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn dns_timeout<T>(
     cancel: &CancellationToken,
     fut: impl std::future::Future<Output = std::result::Result<T, impl Into<Error>>>,
@@ -3679,6 +3719,7 @@ async fn dns_timeout<T>(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn client_config(target: &MasterTarget) -> Result<quinn::ClientConfig> {
     let mut crypto = rustls::ClientConfig::builder()
         .with_root_certificates(updater::trust_roots(&target.ca_pem)?)
@@ -3696,6 +3737,7 @@ fn client_config(target: &MasterTarget) -> Result<quinn::ClientConfig> {
     Ok(client_config)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn connect(
     target: &MasterTarget,
     cancel: &CancellationToken,

@@ -183,6 +183,16 @@ fn create_latest_pointer(id: &str, latest: &Path) -> Result<(), std::io::Error> 
     std::os::windows::fs::symlink_dir(id, latest)
 }
 
+#[cfg(not(any(unix, windows)))]
+fn remove_latest_pointer(_latest: &Path) -> Result<(), std::io::Error> {
+    Ok(())
+}
+
+#[cfg(not(any(unix, windows)))]
+fn create_latest_pointer(_id: &str, _latest: &Path) -> Result<(), std::io::Error> {
+    Ok(())
+}
+
 pub fn clip_manifest(
     id: &str,
     ticks: u64,

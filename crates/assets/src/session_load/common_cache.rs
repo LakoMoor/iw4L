@@ -238,7 +238,18 @@ impl Drop for FlightGuard {
             *slot = None;
         }
         drop(slot);
+        // Waking waiters never blocks on the browser main thread: poll the set once;
+        // an uncontended cell completes immediately.
+        #[cfg(not(target_arch = "wasm32"))]
         let _ = flight.set.set_blocking(None);
+        #[cfg(target_arch = "wasm32")]
+        {
+            use std::future::Future as _;
+            let mut set = std::pin::pin!(flight.set.set(None));
+            let _ = set
+                .as_mut()
+                .poll(&mut std::task::Context::from_waker(std::task::Waker::noop()));
+        }
     }
 }
 

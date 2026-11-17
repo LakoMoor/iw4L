@@ -33,6 +33,7 @@ impl Presence {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn poll_communities(
     mut commands: Commands,
     counts: Option<Res<CommunityPlayerCounts>>,
@@ -105,6 +106,7 @@ pub(super) fn poll_communities(
     commands.insert_resource(counts);
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn watch_community(
     target: MasterTarget,
     index: usize,
@@ -136,6 +138,7 @@ async fn watch_community(
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn poll_while_wanted(
     target: &MasterTarget,
     index: usize,
