@@ -1,3 +1,5 @@
+import { enableTouch } from "./touch.js";
+import { Host, Guest, describePath } from "./rtc.js";
 import init, { mount_shard, run } from "./pkg/iw4l_web.js";
 
 const GAME_DIR = "Call of Duty Modern Warfare 2";
@@ -73,6 +75,7 @@ async function start() {
   }
   document.body.classList.add("running");
   $("iw4l-canvas").focus();
+  enableTouch({ force: params.has("touch") });
   run();
 }
 
@@ -86,3 +89,56 @@ if (packUrl) {
     if (params.has("autostart")) start().catch((e) => log("error: " + e, "err"));
   }).catch((e) => log("error: " + e, "err"));
 }
+
+// ---- Multiplayer lobby: connect, then prove both channels work ----
+let room = null;
+const peers = $("peers");
+const peerRow = new Map();
+
+function showPeer(id, text, ok) {
+  let li = peerRow.get(id);
+  if (!li) { li = document.createElement("li"); peers.appendChild(li); peerRow.set(id, li); }
+  li.textContent = text;
+  li.className = ok ? "ok" : "";
+}
+
+function wire(r) {
+  r.onOpen = async (id) => {
+    showPeer(id, "Player " + id + ": connected, checking route…", true);
+    r.send(id, "control", new TextEncoder().encode("ping"));
+    const path = await r.path(id);
+    showPeer(id, "Player " + id + ": " + describePath(path), true);
+  };
+  r.onMessage = (id, lane, bytes) => {
+    const text = new TextDecoder().decode(bytes);
+    if (text === "ping") r.send(id, lane, new TextEncoder().encode("pong"));
+    else log("player " + id + " " + lane + ": " + text);
+  };
+  r.onClose = (id, why) => showPeer(id, "Player " + id + ": disconnected (" + why + ")", false);
+}
+
+let pending = null;
+async function newInvite() {
+  const { member, code } = await room.invite();
+  pending = member;
+  $("invite").value = code;
+  $("answer").value = "";
+}
+
+$("host-new").addEventListener("click", () => {
+  room?.close();
+  room = new Host(); wire(room);
+  $("host-box").hidden = false; $("join-box").hidden = true;
+  newInvite().catch((e) => log("error: " + e, "err"));
+});
+$("another").addEventListener("click", () => newInvite().catch((e) => log("error: " + e, "err")));
+$("accept").addEventListener("click", () =>
+  room.accept(pending, $("answer").value).then(() => log("friend connecting…")).catch((e) => log("error: " + e.message, "err")));
+
+$("join-new").addEventListener("click", () => {
+  room?.close();
+  room = new Guest(); wire(room);
+  $("join-box").hidden = false; $("host-box").hidden = true;
+});
+$("make-answer").addEventListener("click", () =>
+  room.join($("host-invite").value).then((code) => { $("my-answer").value = code; }).catch((e) => log("error: " + e.message, "err")));
