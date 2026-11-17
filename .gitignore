@@ -18,3 +18,4 @@ iw4l.community.*.tmp
 .direnv/
 result
 result-*
+/web/pkg/

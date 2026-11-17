@@ -94,11 +94,23 @@ pub fn counting_enabled() -> bool {
 
 fn env_key_present(key_nul: &[u8]) -> bool {
     debug_assert_eq!(key_nul.last().copied(), Some(0));
-    !unsafe { getenv(key_nul.as_ptr().cast()) }.is_null()
+    #[cfg(target_arch = "wasm32")]
+    {
+        let key = core::str::from_utf8(&key_nul[..key_nul.len() - 1]).unwrap_or("");
+        std::env::var_os(key).is_some()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        !unsafe { getenv(key_nul.as_ptr().cast()) }.is_null()
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+unsafe extern "C" {
+    fn getenv(name: *const core::ffi::c_char) -> *mut core::ffi::c_char;
 }
 
 unsafe extern "C" {
-    fn getenv(name: *const core::ffi::c_char) -> *mut core::ffi::c_char;
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     fn malloc_trim(pad: usize) -> core::ffi::c_int;
 }

@@ -123,24 +123,45 @@ impl AudioRuntime {
         let control_rejections = rejections.clone();
         let cue_budget = crate::pending::PendingBudget::default();
         let control_budget = cue_budget.clone();
-        let worker = std::thread::Builder::new()
-            .name("audio-control".into())
-            .spawn(move || {
-                control(
-                    thread_shared,
-                    thread_shutdown,
-                    cue_rx,
-                    device_enabled,
-                    control_sources,
-                    control_listener,
-                    control_event_context,
-                    control_fire_verdicts,
-                    control_ids,
-                    control_rejections,
-                    control_budget,
-                )
-            })
-            .expect("cannot start audio control thread");
+        // The browser has no threads to park a mixer on yet: the runtime stays
+        // silent there and its queues simply reject work (the receiver is gone).
+        #[cfg(target_arch = "wasm32")]
+        let worker: Option<JoinHandle<()>> = {
+            let _ = (
+                thread_shared,
+                thread_shutdown,
+                cue_rx,
+                control_sources,
+                control_listener,
+                control_event_context,
+                control_fire_verdicts,
+                control_ids,
+                control_rejections,
+                control_budget,
+            );
+            None
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        let worker = Some(
+            std::thread::Builder::new()
+                .name("audio-control".into())
+                .spawn(move || {
+                    control(
+                        thread_shared,
+                        thread_shutdown,
+                        cue_rx,
+                        device_enabled,
+                        control_sources,
+                        control_listener,
+                        control_event_context,
+                        control_fire_verdicts,
+                        control_ids,
+                        control_rejections,
+                        control_budget,
+                    )
+                })
+                .expect("cannot start audio control thread"),
+        );
         Self {
             shared,
             cue_tx,
@@ -155,7 +176,7 @@ impl AudioRuntime {
             source_publisher: Mutex::new(SourcePublisher::new()),
             rejections,
             shutdown,
-            worker: Some(worker),
+            worker,
         }
     }
 

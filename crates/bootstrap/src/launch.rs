@@ -470,11 +470,11 @@ fn run_menu(
     app.insert_resource(master_intent);
     app.add_plugins(crate::plugins::default_plugins_with_quiet_log(
         WindowPlugin {
-            primary_window: Some(Window {
+            primary_window: Some(crate::plugins::browser_window(Window {
                 title: "iw4l".into(),
                 resolution: (1280, 720).into(),
                 ..default()
-            }),
+            })),
             ..default()
         },
     ));
@@ -710,7 +710,7 @@ fn run_map(
             } else {
                 bevy::window::ExitCondition::OnAllClosed
             },
-            primary_window: (!dedicated).then(|| Window {
+            primary_window: (!dedicated).then(|| crate::plugins::browser_window(Window {
                 title: match config.role {
                     Role::Replay => format!("iw4l — play {}", config.zone),
                     Role::Listen | Role::Dedicated => format!("iw4l — {}", config.zone),
@@ -719,7 +719,7 @@ fn run_map(
                 resolution: (ACCEPTANCE_WIDTH, ACCEPTANCE_HEIGHT).into(),
                 present_mode,
                 ..default()
-            }),
+            })),
             ..default()
         },
     ));

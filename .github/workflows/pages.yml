@@ -3,7 +3,7 @@ name: Pages
 on:
   push:
     branches: [main, master]
-    paths: ["web/**", ".github/workflows/pages.yml"]
+    paths: ["web/**", "crates/**", "Cargo.toml", "Cargo.lock", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions:
@@ -23,6 +23,24 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Install clang (zstd-sys needs a wasm-capable C compiler)
+        run: sudo apt-get update && sudo apt-get install -y clang lld
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.129
+      - name: Build the engine for the browser
+        run: cargo build --target wasm32-unknown-unknown -p iw4l-web --profile play
+        env:
+          CC_wasm32_unknown_unknown: clang
+      - name: Bind to JavaScript
+        run: |
+          wasm-bindgen --target web --out-dir web/pkg target/wasm32-unknown-unknown/play/iw4l_web.wasm
+      - name: Remove local-only files
+        run: rm -f web/serve.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

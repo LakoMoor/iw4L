@@ -220,11 +220,50 @@ fn ls(args: &[String]) {
     }
 }
 
+/// Join shards into one file the page can slice: shard bytes back to back, then a
+/// JSON table of contents, its length (u64 LE) and the magic `IW4BNDL1`.
+fn bundle(args: &[String]) {
+    let mut out = None;
+    let mut parts: Vec<(String, PathBuf)> = Vec::new();
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        if a == "--out" {
+            out = it.next().map(PathBuf::from);
+        } else {
+            let (name, path) = a.split_once('=').unwrap_or_else(|| die("NAME=SHARD"));
+            parts.push((name.to_owned(), PathBuf::from(path)));
+        }
+    }
+    let out = out.unwrap_or_else(|| die("--out required"));
+    if parts.is_empty() {
+        die("bundle --out FILE name=shard ...");
+    }
+    let mut w = std::io::BufWriter::new(File::create(&out).unwrap_or_else(|e| die(e)));
+    let mut offset = 0u64;
+    let mut toc = Vec::new();
+    for (name, path) in &parts {
+        let mut r = File::open(path).unwrap_or_else(|e| die(e));
+        let len = std::io::copy(&mut r, &mut w).unwrap_or_else(|e| die(e));
+        toc.push(format!(
+            "{{\"name\":\"{name}\",\"offset\":{offset},\"len\":{len}}}"
+        ));
+        offset += len;
+    }
+    let json = format!("{{\"v\":1,\"parts\":[{}]}}", toc.join(","));
+    use std::io::Write;
+    w.write_all(json.as_bytes()).unwrap_or_else(|e| die(e));
+    w.write_all(&(json.len() as u64).to_le_bytes()).unwrap_or_else(|e| die(e));
+    w.write_all(b"IW4BNDL1").unwrap_or_else(|e| die(e));
+    w.flush().unwrap_or_else(|e| die(e));
+    println!("{} parts, {:.1} MB -> {}", parts.len(), (offset + json.len() as u64) as f64 / 1e6, out.display());
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("pack") => pack(&args[1..]),
         Some("ls") => ls(&args[1..]),
+        Some("bundle") => bundle(&args[1..]),
         _ => die("usage: iw4pk pack|ls ..."),
     }
 }

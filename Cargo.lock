@@ -4035,6 +4035,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "iw4l-web"
+version = "0.1.0"
+dependencies = [
+ "asset_transport",
+ "bootstrap",
+ "console_error_panic_hook",
+ "diag",
+ "sim",
+ "vfs",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "iw4pk"
 version = "0.1.0"
 dependencies = [

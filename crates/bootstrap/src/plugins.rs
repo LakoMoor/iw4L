@@ -86,6 +86,18 @@ pub fn add_runtime_plugins_with_role(app: &mut App, role: RuntimeRole) {
     }
 }
 
+/// On the web the engine draws into the page's canvas instead of opening a window.
+pub(crate) fn browser_window(mut window: Window) -> Window {
+    #[cfg(target_arch = "wasm32")]
+    {
+        window.canvas = Some("#iw4l-canvas".into());
+        window.fit_canvas_to_parent = true;
+        window.prevent_default_event_handling = true;
+    }
+    #[allow(clippy::let_and_return)]
+    window
+}
+
 pub fn assemble_listen_app() -> App {
     let mut app = App::new();
     app.add_plugins(default_plugins_with_quiet_log(WindowPlugin {

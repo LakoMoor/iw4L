@@ -45,6 +45,7 @@ members = [
     "crates/input_iw4",
     "crates/iw4pk",
     "crates/vfs",
+    "crates/web",
     "crates/launcher",
     "crates/lighting_iw4",
     "crates/marks_iw4",

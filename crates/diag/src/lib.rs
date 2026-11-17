@@ -266,6 +266,20 @@ fn flush_collapsed(state: &mut DiagState) {
     state.last_count = 1;
 }
 
+/// The browser has no stderr: the page installs a sink that forwards lines to
+/// the developer console.
+static CONSOLE: std::sync::OnceLock<fn(&str)> = std::sync::OnceLock::new();
+
+pub fn set_console_sink(sink: fn(&str)) {
+    let _ = CONSOLE.set(sink);
+}
+
+fn console_line(text: &str) {
+    if let Some(sink) = CONSOLE.get() {
+        sink(text);
+    }
+}
+
 fn emit_raw(
     state: &mut DiagState,
     ch: Channel,
@@ -284,6 +298,9 @@ fn emit_raw(
 
     if lvl <= state.stderr_threshold {
         eprintln!("{text}");
+    }
+    if lvl <= Level::Info {
+        console_line(&text);
     }
     if lvl <= state.file_threshold
         && let Some(file) = state.file.as_mut()
@@ -326,6 +343,7 @@ pub fn write_event(
 ) {
     let Some(sink) = SINK.get() else {
         eprintln!("{}  {}  {msg}", ch.as_str(), lvl.as_str());
+        console_line(&format!("{}  {}  {msg}", ch.as_str(), lvl.as_str()));
         return;
     };
     let Ok(mut state) = sink.lock() else {

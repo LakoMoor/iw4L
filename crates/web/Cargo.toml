@@ -1,0 +1,22 @@
+[package]
+name = "iw4l-web"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Browser entry point: mounts IW4PK shards into the virtual file system and starts the engine on a canvas."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "=0.2.129"
+web-sys = { version = "0.3", features = ["console"] }
+console_error_panic_hook = "0.1"
+bootstrap = { path = "../bootstrap" }
+asset_transport = { path = "../asset_transport" }
+diag = { path = "../diag" }
+vfs = { path = "../vfs" }
+sim = { path = "../sim" }
+
+[lints]
+workspace = true
