@@ -237,7 +237,12 @@ fn build_port(
             let shader = Arc::new(unsafe {
                 device.create_shader_module(ShaderModuleDescriptor {
                     label: Some(&label),
+                    #[cfg(not(target_arch = "wasm32"))]
                     source: ShaderSource::Wgsl(std::borrow::Cow::Borrowed(source.wgsl())),
+                    #[cfg(target_arch = "wasm32")]
+                    source: ShaderSource::Wgsl(std::borrow::Cow::Owned(
+                        d3d9_sm3::flatten_texture_tables(source.wgsl()),
+                    )),
                 })
             });
             (shader.clone(), Some(shader))

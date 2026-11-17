@@ -230,19 +230,31 @@ impl ExactTextureTable {
             &[
                 BindGroupEntry {
                     binding: TEXTURE_TABLE_BINDING_2D,
+                    #[cfg(not(target_arch = "wasm32"))]
                     resource: BindingResource::TextureViewArray(&views),
+                    #[cfg(target_arch = "wasm32")]
+                    resource: BindingResource::TextureView(views.first().copied().unwrap_or(&*placeholders.views[0])),
                 },
                 BindGroupEntry {
                     binding: TEXTURE_TABLE_BINDING_CUBE,
+                    #[cfg(not(target_arch = "wasm32"))]
                     resource: BindingResource::TextureViewArray(&[&*placeholders.views[1]]),
+                    #[cfg(target_arch = "wasm32")]
+                    resource: BindingResource::TextureView(&*placeholders.views[1]),
                 },
                 BindGroupEntry {
                     binding: TEXTURE_TABLE_BINDING_3D,
+                    #[cfg(not(target_arch = "wasm32"))]
                     resource: BindingResource::TextureViewArray(&[&*placeholders.views[2]]),
+                    #[cfg(target_arch = "wasm32")]
+                    resource: BindingResource::TextureView(&*placeholders.views[2]),
                 },
                 BindGroupEntry {
                     binding: d3d9_sm3::TEXTURE_TABLE_BINDING_SAMPLERS,
+                    #[cfg(not(target_arch = "wasm32"))]
                     resource: BindingResource::SamplerArray(&samplers),
+                    #[cfg(target_arch = "wasm32")]
+                    resource: BindingResource::Sampler(samplers.first().copied().unwrap_or(&*placeholders.sampler)),
                 },
             ],
         )
@@ -270,19 +282,31 @@ impl ExactTextureTable {
             &[
                 BindGroupEntry {
                     binding: TEXTURE_TABLE_BINDING_2D,
+                    #[cfg(not(target_arch = "wasm32"))]
                     resource: BindingResource::TextureViewArray(&views_2d),
+                    #[cfg(target_arch = "wasm32")]
+                    resource: BindingResource::TextureView(views_2d[0]),
                 },
                 BindGroupEntry {
                     binding: TEXTURE_TABLE_BINDING_CUBE,
+                    #[cfg(not(target_arch = "wasm32"))]
                     resource: BindingResource::TextureViewArray(&views_cube),
+                    #[cfg(target_arch = "wasm32")]
+                    resource: BindingResource::TextureView(views_cube[0]),
                 },
                 BindGroupEntry {
                     binding: TEXTURE_TABLE_BINDING_3D,
+                    #[cfg(not(target_arch = "wasm32"))]
                     resource: BindingResource::TextureViewArray(&views_3d),
+                    #[cfg(target_arch = "wasm32")]
+                    resource: BindingResource::TextureView(views_3d[0]),
                 },
                 BindGroupEntry {
                     binding: d3d9_sm3::TEXTURE_TABLE_BINDING_SAMPLERS,
+                    #[cfg(not(target_arch = "wasm32"))]
                     resource: BindingResource::SamplerArray(&samplers),
+                    #[cfg(target_arch = "wasm32")]
+                    resource: BindingResource::Sampler(samplers.first().copied().unwrap_or(&*self.placeholders.as_ref().expect("placeholders exist once the table is built").sampler)),
                 },
             ],
         )
@@ -351,4 +375,21 @@ impl ExactTextureTable {
 
 pub(super) fn array_count(count: u32) -> NonZeroU32 {
     NonZeroU32::new(count).expect("texture table capacities are non-zero")
+}
+
+/// Browsers have no binding arrays: there the table entries stay single bindings.
+pub(super) trait CountIfNative {
+    fn count_if_native(self, count: u32) -> Self;
+}
+
+impl CountIfNative for bevy::render::render_resource::BindGroupLayoutEntryBuilder {
+    #[cfg(not(target_arch = "wasm32"))]
+    fn count_if_native(self, count: u32) -> Self {
+        self.count(array_count(count))
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn count_if_native(self, _count: u32) -> Self {
+        self
+    }
 }

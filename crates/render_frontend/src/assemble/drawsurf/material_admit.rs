@@ -7,6 +7,8 @@ use super::sm3_wgsl::ValidatedPassWgsl;
 use super::{MaterialProgramCompile, RuntimeProgramRegistry};
 
 fn shader_from_generated_wgsl(source: String, path: String) -> Shader {
+    #[cfg(target_arch = "wasm32")]
+    let source = d3d9_sm3::flatten_texture_tables(&source);
     Shader::from_wgsl(source, path)
 }
 

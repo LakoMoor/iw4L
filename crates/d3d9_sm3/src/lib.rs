@@ -5,6 +5,7 @@ extern crate alloc;
 
 pub mod abi;
 pub mod bytecode;
+pub mod flatten;
 pub mod ir;
 pub mod wgsl;
 
@@ -25,3 +26,4 @@ pub use wgsl::{
     TEXTURE_TABLE_BINDING_SAMPLERS, TEXTURE_TABLE_GROUP, lower_pass_to_wgsl, lower_sm3_to_wgsl,
     pass_fragment_alpha_test_entry, texture_slot_rows, texture_slot_word,
 };
+pub use flatten::flatten_texture_tables;

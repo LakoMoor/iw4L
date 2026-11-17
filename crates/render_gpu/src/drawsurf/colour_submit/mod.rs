@@ -63,6 +63,7 @@ use super::smodel_cached::{
     lighting_texcoord_register,
 };
 use super::state::{ChangeState0Host, ChangeState1Host, GfxPassState};
+use super::texture_table::CountIfNative as _;
 use super::texture_table::{
     self, ExactTextureTable, SceneTextureTables, ShadowTextureTable, TableEpoch,
     TextureTableRefusal,
@@ -773,11 +774,11 @@ pub fn bind_group_layout_from_entries(
                     super::SamplerTextureDimension::D3 => texture_3d(sample),
                 }
                 .visibility(visibility)
-                .count(texture_table::array_count(count))
+                .count_if_native(count)
             }
             WgpuBindingKind::SamplerArray { count } => sampler(SamplerBindingType::Filtering)
                 .visibility(visibility)
-                .count(texture_table::array_count(count)),
+                .count_if_native(count),
         };
         built.push(builder.build(u32::from(entry.binding), visibility));
     }
