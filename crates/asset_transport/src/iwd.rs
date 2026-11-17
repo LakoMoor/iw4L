@@ -309,6 +309,7 @@ fn read_indexed_entry(file: &IwdFile, limit: Option<usize>) -> Result<Vec<u8>, S
         .reader
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
+    trace_entry(&file.archive, &file.entry);
     let inflate_at = std::time::Instant::now();
     let mut entry = archive.by_name(&file.entry).map_err(|error| {
         format!(
@@ -335,6 +336,7 @@ fn read_pooled_entry(
         .archive
         .as_mut()
         .expect("lease holds its reader until drop");
+    trace_entry(archive_path, entry_name);
     let inflate_at = std::time::Instant::now();
     let mut entry = archive.by_name(entry_name).map_err(|error| {
         format!("cannot open IWD entry {entry_name} in {archive_path:?}: {error}")
@@ -344,6 +346,31 @@ fn read_pooled_entry(
     })?;
     IWD_INFLATE_NS.fetch_add(inflate_at.elapsed().as_nanos() as u64, Ordering::Relaxed);
     Ok(bytes)
+}
+
+/// Pack tooling: when `IW4L_PACK_TRACE` names a file, every IWD entry the
+/// engine reads is appended once as `archive<TAB>entry`. A pack built from
+/// those traces holds exactly what a session touched.
+fn trace_entry(archive: &Path, entry: &str) {
+    static SINK: OnceLock<Option<Mutex<(std::fs::File, std::collections::HashSet<String>)>>> =
+        OnceLock::new();
+    let sink = SINK.get_or_init(|| {
+        let path = std::env::var_os("IW4L_PACK_TRACE")?;
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .ok()?;
+        Some(Mutex::new((file, std::collections::HashSet::new())))
+    });
+    let Some(sink) = sink else { return };
+    let name = archive.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+    let line = format!("{name}\t{entry}");
+    let mut guard = sink.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if guard.1.insert(line.clone()) {
+        use std::io::Write;
+        let _ = writeln!(guard.0, "{line}");
+    }
 }
 
 fn read_entry_bytes<R: Read>(
@@ -505,6 +532,7 @@ pub fn read_iwd_named(games_root: &Path, want: &str) -> Option<Vec<u8>> {
                 if entry.name().replace('\\', "/").eq_ignore_ascii_case(&want)
                     && let Ok(bytes) = read_entry_bytes(&mut entry, None)
                 {
+                    trace_entry(&path, &want);
                     return Some(bytes);
                 }
             }
@@ -596,6 +624,13 @@ impl IwdSoundIndex {
 
     pub fn sound_count(&self) -> usize {
         self.sounds.len()
+    }
+
+    /// Pack tooling: record `relative` as used without reading it.
+    pub fn trace_sound(&self, relative: &str) {
+        if let Some((archive, entry)) = self.sounds.get(&sound_key(relative)) {
+            trace_entry(archive, entry);
+        }
     }
 
     pub fn read_sound(&self, relative: &str) -> Option<Result<Vec<u8>, String>> {

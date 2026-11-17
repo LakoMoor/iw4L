@@ -396,6 +396,13 @@ pub(crate) fn install_sound_bank(
                     compose.zone
                 );
             }
+            if std::env::var_os("IW4L_PACK_TRACE").is_some()
+                && let Some(index) = iwd.index(AssetNamespace::Iw4)
+            {
+                for rel in bank.streamed_rels() {
+                    index.trace_sound(&rel);
+                }
+            }
             let sound_iwd = SoundIwd(Arc::clone(&iwd));
 
             resident.0 = Some(ResidentBank {

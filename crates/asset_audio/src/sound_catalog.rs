@@ -105,6 +105,14 @@ pub struct SoundCatalog {
 }
 
 impl SoundCatalog {
+    /// Every streamed (IWD-resident) sound this bank references, as `dir/name`.
+    pub fn streamed_rels(&self) -> Vec<String> {
+        self.file_to_streamed
+            .values()
+            .map(|(dir, name)| format!("{dir}/{name}"))
+            .collect()
+    }
+
     pub fn sounds(&self) -> &[CapturedSound] {
         &self.sounds
     }

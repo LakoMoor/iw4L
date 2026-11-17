@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IW4L в браузере</title>
+<meta name="description" content="Порт открытого рантайма IW4L (Modern Warfare 2) в браузер: свои файлы игры, мультиплеер напрямую между игроками, без VPN и открытых портов.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Public+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --concrete:#d3d7d2; --panel:#e4e7e2; --ink:#1d2118; --olive:#56613f;
+  --olive-soft:#aab392; --signal:#e4572e; --muted:#4d5346; --line:#1d2118;
+  --display:"Oswald","Arial Narrow",Impact,sans-serif;
+  --body:"Public Sans",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--concrete);color:var(--ink);font:400 1.0625rem/1.6 var(--body);-webkit-font-smoothing:antialiased}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--signal);outline-offset:3px}
+.wrap{max-width:68rem;margin:0 auto;padding:0 1.5rem}
+
+header.top{padding:1.25rem 0;border-bottom:2px solid var(--line)}
+header.top .wrap{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap}
+.mark{font:600 1.5rem/1 var(--display);letter-spacing:.02em}
+header.top nav{display:flex;gap:1.5rem;font-size:.95rem}
+header.top nav a{text-decoration:none;border-bottom:2px solid transparent}
+header.top nav a:hover{border-color:var(--ink)}
+
+.hero{padding:clamp(3rem,8vw,6.5rem) 0 clamp(2.5rem,6vw,4.5rem)}
+.hero h1,section.block h2{text-wrap:balance}
+.hero h1{font:700 clamp(3.4rem,12vw,9.5rem)/.95 var(--display);margin:0;letter-spacing:-.01em;max-width:12ch;text-transform:none}
+.hero p.lede{max-width:34rem;font-size:1.25rem;margin:2rem 0 0;color:var(--muted)}
+.hero p.lede strong{color:var(--ink);font-weight:700}
+
+.bench{background:var(--panel);border:2px solid var(--line);margin:0 0 clamp(3rem,7vw,5rem)}
+.bench-head{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding:1rem 1.25rem;border-bottom:2px solid var(--line);align-items:center}
+.bench-head h2{font:600 1.75rem/1 var(--display);margin:0}
+.bench-head p{margin:0;font-size:.9rem;color:var(--muted);max-width:26rem}
+.bench-body{padding:1.5rem 1.25rem 1.75rem}
+.btn{appearance:none;border:2px solid var(--line);background:var(--signal);color:#fff;font:700 1rem var(--body);padding:.85rem 1.4rem;cursor:pointer;box-shadow:4px 4px 0 var(--line);transition:transform .08s,box-shadow .08s}
+.btn:hover{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--line)}
+.btn:active{transform:translate(4px,4px);box-shadow:0 0 0 var(--line)}
+.btn.ghost{background:transparent;color:var(--ink)}
+.row{display:flex;gap:1rem;flex-wrap:wrap;align-items:center}
+.hint{font-size:.9rem;color:var(--muted);margin:.9rem 0 0}
+#result{margin-top:1.5rem}
+#result[hidden]{display:none}
+.verdict{font:600 clamp(1.6rem,4vw,2.4rem)/1.05 var(--display);margin:0 0 1rem}
+.verdict.bad{color:var(--signal)}
+.bar{display:flex;height:2.25rem;border:2px solid var(--line);background:var(--concrete);overflow:hidden}
+.bar span{display:block;height:100%}
+.bar .seg-zone{background:var(--olive)}
+.bar .seg-iwd{background:var(--olive-soft)}
+.legend{display:flex;gap:1.5rem;flex-wrap:wrap;margin:.6rem 0 1.25rem;font-size:.9rem}
+.legend i{display:inline-block;width:.9rem;height:.9rem;border:2px solid var(--line);margin-right:.4rem;vertical-align:-.1rem}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:1rem;margin:0 0 1.25rem}
+.facts div{border-left:4px solid var(--olive);padding-left:.75rem}
+.facts dt{font-size:.85rem;color:var(--muted)}
+.facts dd{margin:0;font:600 1.9rem/1.1 var(--display)}
+.maps{display:flex;flex-wrap:wrap;gap:.5rem;margin:0;padding:0;list-style:none}
+.maps li{border:2px solid var(--line);padding:.2rem .65rem;font-size:.9rem;background:var(--concrete)}
+.maps li.pack{background:var(--olive);color:#fff}
+.maps li.miss{border-style:dashed;color:var(--muted)}
+
+section.block{padding:clamp(2.5rem,6vw,4.5rem) 0;border-top:2px solid var(--line)}
+section.block h2{font:600 clamp(2.2rem,6vw,3.6rem)/.95 var(--display);margin:0 0 1.75rem;max-width:18ch}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:clamp(1.5rem,5vw,4rem)}
+.two p{margin:0 0 1rem;max-width:34rem}
+@media(max-width:46rem){.two{grid-template-columns:1fr}}
+
+.status{margin:0;padding:0;list-style:none;border-top:2px solid var(--line)}
+.status li{display:grid;grid-template-columns:9rem 1fr;gap:1rem;padding:1.1rem 0;border-bottom:1px solid var(--olive-soft);align-items:baseline}
+.status h3{margin:0;font:700 1.1rem/1.3 var(--body)}
+.status p{margin:.2rem 0 0;color:var(--muted);font-size:.97rem;max-width:40rem}
+.tag{display:inline-block;font:700 .85rem/1 var(--body);padding:.35rem .6rem;border:2px solid var(--line);width:max-content}
+.tag.done{background:var(--olive);color:#fff}
+.tag.doing{background:var(--signal);color:#fff;border-color:var(--signal)}
+.tag.todo{background:transparent}
+@media(max-width:40rem){.status li{grid-template-columns:1fr;gap:.4rem}}
+
+.sizes{width:100%;border-collapse:collapse;font-size:.97rem}
+.sizes th,.sizes td{text-align:left;padding:.55rem .75rem .55rem 0;border-bottom:1px solid var(--olive-soft)}
+.sizes th{font-weight:700;border-bottom:2px solid var(--line)}
+.sizes td:last-child,.sizes th:last-child{text-align:right;font-variant-numeric:tabular-nums}
+
+footer{border-top:2px solid var(--line);padding:2rem 0 3rem;font-size:.9rem;color:var(--muted)}
+footer p{margin:0 0 .5rem;max-width:44rem}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <span class="mark">IW4L web</span>
+  <nav aria-label="Разделы"><a href="#check">Проверить папку</a><a href="#status">Статус</a><a href="#net">Мультиплеер</a><a href="https://github.com/LakoMoor/iw4L">GitHub</a></nav>
+</div></header>
+
+<main>
+<div class="wrap">
+  <section class="hero">
+    <h1>Modern Warfare 2 во вкладке</h1>
+    <p class="lede">Открытый движок <a href="https://github.com/vladtrc/iw4L">IW4L</a> переносится на WebAssembly. Игра берёт <strong>ваши собственные файлы MW2</strong>, а друзья подключаются напрямую друг к другу: без VPN и без проброса портов.</p>
+  </section>
+
+  <section class="bench" id="check" aria-labelledby="bench-title">
+    <div class="bench-head">
+      <h2 id="bench-title">Проверьте свою копию MW2</h2>
+      <p>Страница читает названия и размеры файлов прямо в браузере. Ничего не загружается на сервер.</p>
+    </div>
+    <div class="bench-body">
+      <div class="row">
+        <button class="btn" id="pick" type="button">Выбрать папку с игрой</button>
+        <label class="btn ghost" for="fallback" id="fallback-label" hidden>Выбрать папку (запасной способ)</label>
+        <input id="fallback" type="file" webkitdirectory multiple hidden>
+      </div>
+      <p class="hint">Нужна папка «Call of Duty Modern Warfare 2» из Steam (с подпапками <code>main</code> и <code>zone</code>).</p>
+      <div id="result" hidden aria-live="polite"></div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap">
+  <section class="block" id="status">
+    <h2>Что готово, а что ещё нет</h2>
+    <ul class="status">
+      <li><span class="tag done">Готово</span><div><h3>Формат пака IW4PK</h3><p>Сжатые куски файлов с оглавлением в конце: браузер докачивает только нужную карту. Читатель на чистом Rust уже собирается под WebAssembly.</p></div></li>
+      <li><span class="tag done">Готово</span><div><h3>Упаковщик и трассировка</h3><p>Движок записывает, какие файлы игра реально читает на карте. В пак попадают только они: 11,6 ГБ превращаются в 0,7–0,8 ГБ на карту.</p></div></li>
+      <li><span class="tag doing">В работе</span><div><h3>Движок под WebAssembly</h3><p>Сетевой слой на UDP и QUIC, потоки и файловая система переписываются под браузер. Рендер идёт через WebGPU.</p></div></li>
+      <li><span class="tag todo">Дальше</span><div><h3>Загрузка карты из вашей папки или пака</h3><p>Выбранные файлы читаются локально и кэшируются в браузере.</p></div></li>
+      <li><span class="tag todo">Дальше</span><div><h3>Мультиплеер по WebRTC</h3><p>Хост создаёт приглашение, друзья вставляют его и подключаются напрямую.</p></div></li>
+    </ul>
+  </section>
+
+  <section class="block" id="net">
+    <h2>Мультиплеер без сервера и портов</h2>
+    <div class="two">
+      <div>
+        <p>Хост остаётся авторитетным: он считает матч, как и в обычном IW4L. Остальные игроки подключаются к нему через WebRTC DataChannel.</p>
+        <p>Для обхода NAT используются публичные STUN-серверы. Свой сервер, VPN и пробросы не нужны, а приглашение передаётся ссылкой или кодом.</p>
+      </div>
+      <div>
+        <p><strong>Честное ограничение.</strong> Если у кого-то строгий (симметричный) NAT, а TURN-сервера нет, прямое соединение может не установиться. Это свойство WebRTC, а не движка.</p>
+        <p>Файлы игры на этом сайте не лежат. Каждый игрок использует свою копию MW2 либо получает закрытый пак от организатора.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="sizes">
+    <h2>Сколько придётся скачать</h2>
+    <table class="sizes">
+      <thead><tr><th>Часть</th><th>Что внутри</th><th>Размер</th></tr></thead>
+      <tbody>
+        <tr><td>common</td><td>общие зоны и текстуры</td><td>605 МБ</td></tr>
+        <tr><td>mp_rust</td><td>карта Rust</td><td>107 МБ</td></tr>
+        <tr><td>mp_boneyard</td><td>карта Scrapyard</td><td>159 МБ</td></tr>
+        <tr><td>mp_favela</td><td>карта Favela</td><td>198 МБ</td></tr>
+        <tr><td>mp_terminal</td><td>карта Terminal</td><td>213 МБ</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">Игроку нужен common плюс шард выбранной карты. Исходные 11,6 ГБ не скачиваются.</p>
+  </section>
+</div>
+</main>
+
+<footer><div class="wrap">
+  <p>IW4L — открытый проект под лицензией Apache 2.0, не связан с Activision. Эта страница не содержит игровых файлов и не распространяет их.</p>
+  <p>Исходный код: <a href="https://github.com/vladtrc/iw4L">vladtrc/iw4L</a>, работа над браузерной версией: <a href="https://github.com/LakoMoor/iw4L">LakoMoor/iw4L</a>.</p>
+</div></footer>
+
+<script>
+(() => {
+  const GB = 1e9, MB = 1e6;
+  const MP_MAPS = ["mp_rust","mp_boneyard","mp_terminal","mp_favela","mp_afghan","mp_derail","mp_estate","mp_highrise","mp_invasion","mp_checkpoint","mp_quarry","mp_rundown","mp_nightshift","mp_subbase","mp_underpass","mp_brecourt"];
+  const PACKED = new Set(["mp_rust","mp_boneyard","mp_terminal","mp_favela"]);
+  const pick = document.getElementById("pick");
+  const fb = document.getElementById("fallback");
+  const fbLabel = document.getElementById("fallback-label");
+  const out = document.getElementById("result");
+  const fmt = b => b >= GB ? (b / GB).toFixed(1) + " ГБ" : Math.round(b / MB) + " МБ";
+
+  if (!window.showDirectoryPicker) { fbLabel.hidden = false; pick.classList.add("ghost"); }
+
+  async function walk(dir, prefix, depth, files) {
+    for await (const [name, h] of dir.entries()) {
+      if (h.kind === "file") {
+        const f = await h.getFile();
+        files.push({ path: prefix + name, size: f.size });
+      } else if (depth > 0) {
+        await walk(h, prefix + name + "/", depth - 1, files);
+      }
+    }
+  }
+
+  pick.addEventListener("click", async () => {
+    if (!window.showDirectoryPicker) { fb.click(); return; }
+    try {
+      const root = await showDirectoryPicker({ id: "mw2" });
+      const files = [];
+      for (const sub of ["main", "zone"]) {
+        try { await walk(await root.getDirectoryHandle(sub), sub + "/", 1, files); } catch {}
+      }
+      report(files);
+    } catch (e) { if (e.name !== "AbortError") fail("Не удалось прочитать папку: " + e.message); }
+  });
+
+  fb.addEventListener("change", () => {
+    const files = [...fb.files].map(f => {
+      const p = f.webkitRelativePath.split("/").slice(1).join("/");
+      return { path: p, size: f.size };
+    }).filter(f => /^(main|zone)\//.test(f.path));
+    report(files);
+  });
+
+  function fail(msg) {
+    out.hidden = false;
+    out.innerHTML = '<p class="verdict bad"></p>';
+    out.firstChild.textContent = msg;
+  }
+
+  function report(files) {
+    const zone = files.filter(f => /^zone\/[^/]+\/[^/]+\.ff$/i.test(f.path));
+    const iwd = files.filter(f => /^main\/[^/]+\.iwd$/i.test(f.path));
+    if (!zone.length || !iwd.length) {
+      fail("Здесь нет файлов MW2. Выберите папку, внутри которой лежат main и zone.");
+      return;
+    }
+    const langs = [...new Set(zone.map(f => f.path.split("/")[1]))];
+    const names = new Set(zone.map(f => f.path.split("/").pop().replace(/\.ff$/i, "").toLowerCase()));
+    const hasMP = names.has("common_mp");
+    const zBytes = zone.reduce((s, f) => s + f.size, 0);
+    const iBytes = iwd.reduce((s, f) => s + f.size, 0);
+    const total = zBytes + iBytes;
+    const found = MP_MAPS.filter(m => names.has(m));
+
+    const ok = hasMP && found.length > 0;
+    const verdict = ok ? "Мультиплеерные файлы на месте" : "Это не мультиплеерная часть MW2";
+    const sub = ok ? "" : "Не нашлось common_mp.ff или карт. Нужна версия «Multiplayer» из Steam.";
+
+    out.hidden = false;
+    out.innerHTML = `
+      <p class="verdict ${ok ? "" : "bad"}"></p>
+      <div class="bar" role="img" aria-label="Соотношение зон и архивов"><span class="seg-zone" style="width:${(zBytes / total * 100).toFixed(1)}%"></span><span class="seg-iwd" style="width:${(iBytes / total * 100).toFixed(1)}%"></span></div>
+      <div class="legend"><span><i style="background:var(--olive)"></i>зоны .ff: <b data-z></b></span><span><i style="background:var(--olive-soft)"></i>архивы .iwd: <b data-i></b></span></div>
+      <dl class="facts"><div><dt>Всего на диске</dt><dd data-t></dd></div><div><dt>Язык озвучки и интерфейса</dt><dd data-l></dd></div><div><dt>Карт мультиплеера</dt><dd data-m></dd></div></dl>
+      <ul class="maps" aria-label="Найденные карты"></ul>
+      <p class="hint" data-sub></p>`;
+    out.querySelector(".verdict").textContent = verdict;
+    out.querySelector("[data-z]").textContent = fmt(zBytes);
+    out.querySelector("[data-i]").textContent = fmt(iBytes);
+    out.querySelector("[data-t]").textContent = fmt(total);
+    out.querySelector("[data-l]").textContent = langs.join(", ");
+    out.querySelector("[data-m]").textContent = found.length + " из " + MP_MAPS.length;
+    out.querySelector("[data-sub]").textContent = sub || "Выделены карты, для которых уже собран пак. Остальные движок прочитает из вашей папки.";
+    const ul = out.querySelector(".maps");
+    MP_MAPS.forEach(m => {
+      const li = document.createElement("li");
+      li.textContent = m;
+      li.className = !names.has(m) ? "miss" : PACKED.has(m) ? "pack" : "";
+      ul.appendChild(li);
+    });
+  }
+})();
+</script>
+</body>
+</html>
