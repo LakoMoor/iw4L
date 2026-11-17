@@ -134,6 +134,13 @@ impl IwdIndex {
         let next = std::sync::atomic::AtomicUsize::new(0);
         let done: Mutex<Vec<IndexedArchive>> = Mutex::new(Vec::with_capacity(archives.len()));
         let lanes = archives.len().min(index_lane_width());
+        #[cfg(target_arch = "wasm32")]
+        for (slot, path) in archives.iter().enumerate() {
+            done.lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push((slot, index_image_entries(path)));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         std::thread::scope(|scope| {
             for _ in 0..lanes {
                 scope.spawn(|| {
@@ -183,6 +190,39 @@ fn is_iwd_archive(path: &Path) -> bool {
             .is_some_and(|name| name.as_encoded_bytes().starts_with(b"._"))
 }
 
+#[cfg(target_arch = "wasm32")]
+fn index_image_entries(path: &Path) -> Result<Vec<(String, IwdFile)>, String> {
+    let members = vfs::archive_entries(path)
+        .ok_or_else(|| format!("cannot index {}: not a mounted archive", path.display()))?;
+    let reader = Arc::new(Mutex::new(()));
+    let mut entries = Vec::new();
+    for member in members {
+        let exact = member.name;
+        let normalized = exact.replace('\\', "/");
+        let Some(name) = normalized
+            .strip_prefix("images/")
+            .and_then(|name| name.strip_suffix(".iwi"))
+        else {
+            continue;
+        };
+        if name.is_empty() || name.contains('/') {
+            continue;
+        }
+        entries.push((
+            name.to_ascii_lowercase(),
+            IwdFile {
+                archive: path.to_path_buf(),
+                entry: exact,
+                crc32: 0,
+                size: member.size,
+                reader: reader.clone(),
+            },
+        ));
+    }
+    Ok(entries)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn index_image_entries(path: &Path) -> Result<Vec<(String, IwdFile)>, String> {
     let file = vfs::File::open(path)
         .map_err(|error| format!("cannot open {}: {error}", path.display()))?;
@@ -222,7 +262,12 @@ fn index_image_entries(path: &Path) -> Result<Vec<(String, IwdFile)>, String> {
     Ok(entries)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 type OpenArchive = zip::ZipArchive<std::io::BufReader<vfs::File>>;
+/// The browser reads members straight from the mounted shard, so an "open"
+/// archive carries no state.
+#[cfg(target_arch = "wasm32")]
+type OpenArchive = ();
 
 static PARKED: OnceLock<Mutex<HashMap<PathBuf, Vec<OpenArchive>>>> = OnceLock::new();
 
@@ -264,17 +309,25 @@ impl ArchiveLease {
                 archive: Some(archive),
             });
         }
-        let opened_at = web_time::Instant::now();
-        let disk = vfs::File::open(path)
-            .map_err(|error| format!("cannot open {}: {error}", path.display()))?;
-        let archive = zip::ZipArchive::new(std::io::BufReader::new(disk))
-            .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
-        IWD_DIRECTORY_NS.fetch_add(opened_at.elapsed().as_nanos() as u64, Ordering::Relaxed);
-        IWD_DIRECTORY_OPENS.fetch_add(1, Ordering::Relaxed);
-        Ok(Self {
+        #[cfg(target_arch = "wasm32")]
+        return Ok(Self {
             path: path.to_path_buf(),
-            archive: Some(archive),
-        })
+            archive: Some(()),
+        });
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let opened_at = web_time::Instant::now();
+            let disk = vfs::File::open(path)
+                .map_err(|error| format!("cannot open {}: {error}", path.display()))?;
+            let archive = zip::ZipArchive::new(std::io::BufReader::new(disk))
+                .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
+            IWD_DIRECTORY_NS.fetch_add(opened_at.elapsed().as_nanos() as u64, Ordering::Relaxed);
+            IWD_DIRECTORY_OPENS.fetch_add(1, Ordering::Relaxed);
+            Ok(Self {
+                path: path.to_path_buf(),
+                archive: Some(archive),
+            })
+        }
     }
 }
 
@@ -304,6 +357,17 @@ static IWD_DIRECTORY_NS: AtomicU64 = AtomicU64::new(0);
 static IWD_DIRECTORY_OPENS: AtomicU64 = AtomicU64::new(0);
 static IWD_INFLATE_NS: AtomicU64 = AtomicU64::new(0);
 
+#[cfg(target_arch = "wasm32")]
+fn read_indexed_entry(file: &IwdFile, limit: Option<usize>) -> Result<Vec<u8>, String> {
+    trace_entry(&file.archive, &file.entry);
+    vfs::archive_read(&file.archive, &file.entry, limit)
+        .ok_or_else(|| format!("{} is not a mounted archive", file.archive.display()))?
+        .map_err(|error| {
+            format!("cannot read {} in {}: {error}", file.entry, file.archive.display())
+        })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn read_indexed_entry(file: &IwdFile, limit: Option<usize>) -> Result<Vec<u8>, String> {
     let mut archive = file
         .reader
@@ -326,6 +390,21 @@ fn read_indexed_entry(file: &IwdFile, limit: Option<usize>) -> Result<Vec<u8>, S
     Ok(bytes)
 }
 
+#[cfg(target_arch = "wasm32")]
+fn read_pooled_entry(
+    archive_path: &Path,
+    entry_name: &str,
+    limit: Option<usize>,
+) -> Result<Vec<u8>, String> {
+    trace_entry(archive_path, entry_name);
+    vfs::archive_read(archive_path, entry_name, limit)
+        .ok_or_else(|| format!("{} is not a mounted archive", archive_path.display()))?
+        .map_err(|error| {
+            format!("cannot read IWD entry {entry_name} in {archive_path:?}: {error}")
+        })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn read_pooled_entry(
     archive_path: &Path,
     entry_name: &str,
@@ -373,6 +452,7 @@ fn trace_entry(archive: &Path, entry: &str) {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn read_entry_bytes<R: Read>(
     entry: &mut zip::read::ZipFile<'_, R>,
     limit: Option<usize>,
@@ -519,21 +599,37 @@ pub fn read_iwd_named(games_root: &Path, want: &str) -> Option<Vec<u8>> {
             if !is_iwd_archive(&path) {
                 continue;
             }
-            let Ok(file) = vfs::File::open(&path) else {
-                continue;
-            };
-            let Ok(mut archive) = zip::ZipArchive::new(file) else {
-                continue;
-            };
-            for index in 0..archive.len() {
-                let Ok(mut entry) = archive.by_index(index) else {
+            #[cfg(target_arch = "wasm32")]
+            {
+                if let Some(members) = vfs::archive_entries(&path) {
+                    for member in members {
+                        if member.name.replace('\\', "/").eq_ignore_ascii_case(&want)
+                            && let Some(Ok(bytes)) = vfs::archive_read(&path, &member.name, None)
+                        {
+                            trace_entry(&path, &want);
+                            return Some(bytes);
+                        }
+                    }
+                }
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let Ok(file) = vfs::File::open(&path) else {
                     continue;
                 };
-                if entry.name().replace('\\', "/").eq_ignore_ascii_case(&want)
-                    && let Ok(bytes) = read_entry_bytes(&mut entry, None)
-                {
-                    trace_entry(&path, &want);
-                    return Some(bytes);
+                let Ok(mut archive) = zip::ZipArchive::new(file) else {
+                    continue;
+                };
+                for index in 0..archive.len() {
+                    let Ok(mut entry) = archive.by_index(index) else {
+                        continue;
+                    };
+                    if entry.name().replace('\\', "/").eq_ignore_ascii_case(&want)
+                        && let Ok(bytes) = read_entry_bytes(&mut entry, None)
+                    {
+                        trace_entry(&path, &want);
+                        return Some(bytes);
+                    }
                 }
             }
         }
@@ -597,13 +693,22 @@ impl IwdSoundIndex {
 
         let mut sounds = HashMap::new();
         for path in archives {
-            let file = vfs::File::open(&path)
-                .map_err(|e| format!("cannot open {}: {e}", path.display()))?;
-
-            let archive = zip::ZipArchive::new(std::io::BufReader::new(file))
-                .map_err(|e| format!("zip {}: {e}", path.display()))?;
+            #[cfg(target_arch = "wasm32")]
+            let names: Vec<String> = vfs::archive_entries(&path)
+                .ok_or_else(|| format!("{} is not a mounted archive", path.display()))?
+                .into_iter()
+                .map(|member| member.name)
+                .collect();
+            #[cfg(not(target_arch = "wasm32"))]
+            let names: Vec<String> = {
+                let file = vfs::File::open(&path)
+                    .map_err(|e| format!("cannot open {}: {e}", path.display()))?;
+                let archive = zip::ZipArchive::new(std::io::BufReader::new(file))
+                    .map_err(|e| format!("zip {}: {e}", path.display()))?;
+                archive.file_names().map(str::to_owned).collect()
+            };
             let language = archive_language(&path);
-            for name in archive.file_names() {
+            for name in names.iter().map(String::as_str) {
                 let Some(rel) = sound_rel_from_zip_name(name, language.as_deref()) else {
                     continue;
                 };

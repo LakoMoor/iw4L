@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>IW4L — Modern Warfare 2 в браузере</title>
-<meta name="description" content="Порт открытого рантайма IW4L (Modern Warfare 2) в браузер: свои файлы игры, мультиплеер напрямую между игроками, без VPN и открытых портов.">
+<title>IW4L — Modern Warfare 2 in your browser</title>
+<meta name="description" content="A port of the open IW4L runtime (Modern Warfare 2) to the browser: your own game files, peer-to-peer multiplayer, no VPN and no open ports.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700&family=Russo+One&display=swap" rel="stylesheet">
@@ -120,37 +120,37 @@ footer p{margin:0 0 .5rem;max-width:46rem}
 <body>
 <header class="top"><div class="wrap">
   <span class="mark">IW4L <b>WEB</b></span>
-  <nav aria-label="Разделы"><a href="#check">Проверить папку</a><a href="#status">Статус</a><a href="#net">Мультиплеер</a><a href="https://github.com/LakoMoor/iw4L">GitHub</a></nav>
+  <nav aria-label="Sections"><a href="#check">Check your folder</a><a href="#status">Status</a><a href="#net">Multiplayer</a><a href="https://github.com/LakoMoor/iw4L">GitHub</a></nav>
 </div></header>
 
 <main>
 <div class="wrap">
   <section class="hero">
     <div>
-      <span class="kicker">Modern Warfare 2 · порт в браузер</span>
-      <h1>Бой в <em>одной</em> вкладке</h1>
-      <p class="lede">Открытый движок <a href="https://github.com/vladtrc/iw4L">IW4L</a> переносится на WebAssembly. Игра берёт <strong>ваши собственные файлы MW2</strong>, а друзья подключаются напрямую друг к другу: без VPN и без проброса портов.</p>
+      <span class="kicker">Modern Warfare 2 · browser port</span>
+      <h1>The whole war in <em>one</em> tab</h1>
+      <p class="lede">The open <a href="https://github.com/vladtrc/iw4L">IW4L</a> engine is being ported to WebAssembly. It uses <strong>your own MW2 files</strong>, and friends connect straight to each other: no VPN, no port forwarding.</p>
     </div>
-    <ul class="menu" aria-label="Главное меню">
-      <li><a href="#check">Проверить папку MW2 <span>локально</span></a></li>
-      <li><a href="#net">Мультиплеер <span>WebRTC</span></a></li>
-      <li><a href="#sizes">Размер пака <span>0,7–0,8 ГБ</span></a></li>
-      <li><a href="#status">Статус порта <span>в работе</span></a></li>
+    <ul class="menu" aria-label="Main menu">
+      <li><a href="#check">Check MW2 folder <span>local only</span></a></li>
+      <li><a href="#net">Multiplayer <span>WebRTC</span></a></li>
+      <li><a href="#sizes">Download size <span>0.7–0.8 GB</span></a></li>
+      <li><a href="#status">Port status <span>in progress</span></a></li>
     </ul>
   </section>
 
   <section class="panel" id="check" aria-labelledby="bench-title">
     <div class="panel-head">
-      <h2 id="bench-title">Проверьте свою копию MW2</h2>
-      <p>Страница читает названия и размеры файлов прямо в браузере. Ничего не загружается на сервер.</p>
+      <h2 id="bench-title">Check your copy of MW2</h2>
+      <p>This page reads file names and sizes right in your browser. Nothing is uploaded anywhere.</p>
     </div>
     <div class="panel-body">
       <div class="row">
-        <button class="btn" id="pick" type="button">Выбрать папку с игрой</button>
-        <label class="btn ghost" for="fallback" id="fallback-label" hidden>Выбрать папку (запасной способ)</label>
+        <button class="btn" id="pick" type="button">Choose game folder</button>
+        <label class="btn ghost" for="fallback" id="fallback-label" hidden>Choose folder (fallback)</label>
         <input id="fallback" type="file" webkitdirectory multiple hidden>
       </div>
-      <p class="hint">Нужна папка «Call of Duty Modern Warfare 2» из Steam (с подпапками <code>main</code> и <code>zone</code>).</p>
+      <p class="hint">Pick the “Call of Duty Modern Warfare 2” folder from Steam (it contains <code>main</code> and <code>zone</code>).</p>
       <div id="result" hidden aria-live="polite"></div>
     </div>
   </section>
@@ -158,50 +158,50 @@ footer p{margin:0 0 .5rem;max-width:46rem}
 
 <div class="wrap">
   <section class="block" id="status">
-    <h2>Что готово, а что ещё нет</h2>
+    <h2>What works and what doesn’t yet</h2>
     <ul class="status">
-      <li><span class="tag done">Готово</span><div><h3>Формат пака IW4PK</h3><p>Сжатые куски файлов с оглавлением в конце: браузер докачивает только нужную карту. Читатель на чистом Rust собирается под WebAssembly.</p></div></li>
-      <li><span class="tag done">Готово</span><div><h3>Упаковщик и трассировка</h3><p>Движок записывает, какие файлы игра реально читает на карте. В пак попадают только они: 11,6 ГБ превращаются в 0,7–0,8 ГБ на карту.</p></div></li>
-      <li><span class="tag done">Готово</span><div><h3>Движок собирается под WebAssembly</h3><p>Весь рабочий набор крейтов компилируется для браузера: сетевой слой, файлы и время переведены на браузерные реализации.</p></div></li>
-      <li><span class="tag doing">В работе</span><div><h3>Запуск в браузере</h3><p>Точка входа, виртуальная файловая система поверх паков и рендер через WebGPU.</p></div></li>
-      <li><span class="tag">Дальше</span><div><h3>Мультиплеер по WebRTC</h3><p>Хост создаёт приглашение, друзья вставляют его и подключаются напрямую.</p></div></li>
+      <li><span class="tag done">Done</span><div><h3>IW4PK pack format</h3><p>Compressed chunks with the index at the end, so the browser downloads only the map you pick. The pure-Rust reader builds for WebAssembly.</p></div></li>
+      <li><span class="tag done">Done</span><div><h3>Packer and file tracing</h3><p>The engine records which files a map really reads, and only those go into the pack: 11.6 GB becomes 0.7–0.8 GB per map.</p></div></li>
+      <li><span class="tag done">Done</span><div><h3>The engine builds for WebAssembly</h3><p>The whole workspace compiles for the browser: networking, files and time now have browser implementations.</p></div></li>
+      <li><span class="tag doing">In progress</span><div><h3>Running in the browser</h3><p>Entry point, a virtual file system over the packs, and rendering through WebGPU.</p></div></li>
+      <li><span class="tag">Next</span><div><h3>WebRTC multiplayer</h3><p>The host creates an invite, friends paste it and connect directly.</p></div></li>
     </ul>
   </section>
 
   <section class="block" id="net">
-    <h2>Мультиплеер без сервера и портов</h2>
+    <h2>Multiplayer with no server and no open ports</h2>
     <div class="two">
       <div>
-        <p>Хост остаётся авторитетным: он считает матч, как и в обычном IW4L. Остальные игроки подключаются к нему через WebRTC DataChannel.</p>
-        <p>Для обхода NAT используются публичные STUN-серверы. Свой сервер, VPN и пробросы не нужны, а приглашение передаётся ссылкой или кодом.</p>
+        <p>The host stays authoritative: it simulates the match, just like regular IW4L. Other players connect to the host over a WebRTC data channel.</p>
+        <p>Public STUN servers handle NAT traversal. You need no server, no VPN and no port forwarding, and the invite is shared as a link or a code.</p>
       </div>
       <div>
-        <p><strong>Честное ограничение.</strong> Если у кого-то строгий (симметричный) NAT, а TURN-сервера нет, прямое соединение может не установиться. Это свойство WebRTC, а не движка.</p>
-        <p>Файлы игры на этом сайте не лежат. Каждый игрок использует свою копию MW2 либо получает закрытый пак от организатора.</p>
+        <p><strong>An honest limit.</strong> If someone is behind a strict (symmetric) NAT and there is no TURN server, a direct connection may fail. That is a property of WebRTC, not of the engine.</p>
+        <p>No game files are hosted on this site. Every player uses their own copy of MW2, or gets a private pack from the organizer.</p>
       </div>
     </div>
   </section>
 
   <section class="block" id="sizes">
-    <h2>Сколько придётся скачать</h2>
+    <h2>How much you download</h2>
     <table class="sizes">
-      <thead><tr><th>Часть</th><th>Что внутри</th><th>Размер</th></tr></thead>
+      <thead><tr><th>Part</th><th>Contents</th><th>Size</th></tr></thead>
       <tbody>
-        <tr><td>common</td><td>общие зоны и текстуры</td><td>605 МБ</td></tr>
-        <tr><td>mp_rust</td><td>карта Rust</td><td>107 МБ</td></tr>
-        <tr><td>mp_boneyard</td><td>карта Scrapyard</td><td>159 МБ</td></tr>
-        <tr><td>mp_favela</td><td>карта Favela</td><td>198 МБ</td></tr>
-        <tr><td>mp_terminal</td><td>карта Terminal</td><td>213 МБ</td></tr>
+        <tr><td>common</td><td>shared zones and textures</td><td>605 MB</td></tr>
+        <tr><td>mp_rust</td><td>Rust map</td><td>107 MB</td></tr>
+        <tr><td>mp_boneyard</td><td>Scrapyard map</td><td>159 MB</td></tr>
+        <tr><td>mp_favela</td><td>Favela map</td><td>198 MB</td></tr>
+        <tr><td>mp_terminal</td><td>Terminal map</td><td>213 MB</td></tr>
       </tbody>
     </table>
-    <p class="hint">Игроку нужен common плюс шард выбранной карты. Исходные 11,6 ГБ не скачиваются.</p>
+    <p class="hint">A player needs common plus the shard of the chosen map. The original 11.6 GB is never downloaded.</p>
   </section>
 </div>
 </main>
 
 <footer><div class="wrap">
-  <p>IW4L — открытый проект под лицензией Apache 2.0, не связан с Activision. Эта страница не содержит игровых файлов и не распространяет их.</p>
-  <p>Исходный код: <a href="https://github.com/vladtrc/iw4L">vladtrc/iw4L</a>, работа над браузерной версией: <a href="https://github.com/LakoMoor/iw4L">LakoMoor/iw4L</a>.</p>
+  <p>IW4L is an open-source project under the Apache 2.0 license and is not affiliated with Activision. This page contains no game files and does not distribute any.</p>
+  <p>Source: <a href="https://github.com/vladtrc/iw4L">vladtrc/iw4L</a>. Browser port work: <a href="https://github.com/LakoMoor/iw4L">LakoMoor/iw4L</a>.</p>
 </div></footer>
 
 <script>
@@ -213,7 +213,7 @@ footer p{margin:0 0 .5rem;max-width:46rem}
   const fb = document.getElementById("fallback");
   const fbLabel = document.getElementById("fallback-label");
   const out = document.getElementById("result");
-  const fmt = b => b >= GB ? (b / GB).toFixed(1) + " ГБ" : Math.round(b / MB) + " МБ";
+  const fmt = b => b >= GB ? (b / GB).toFixed(1) + " GB" : Math.round(b / MB) + " MB";
 
   if (!window.showDirectoryPicker) { fbLabel.hidden = false; pick.classList.add("ghost"); }
 
@@ -237,7 +237,7 @@ footer p{margin:0 0 .5rem;max-width:46rem}
         try { await walk(await root.getDirectoryHandle(sub), sub + "/", 1, files); } catch {}
       }
       report(files);
-    } catch (e) { if (e.name !== "AbortError") fail("Не удалось прочитать папку: " + e.message); }
+    } catch (e) { if (e.name !== "AbortError") fail("Could not read the folder: " + e.message); }
   });
 
   fb.addEventListener("change", () => {
@@ -258,7 +258,7 @@ footer p{margin:0 0 .5rem;max-width:46rem}
     const zone = files.filter(f => /^zone\/[^/]+\/[^/]+\.ff$/i.test(f.path));
     const iwd = files.filter(f => /^main\/[^/]+\.iwd$/i.test(f.path));
     if (!zone.length || !iwd.length) {
-      fail("Здесь нет файлов MW2. Выберите папку, внутри которой лежат main и zone.");
+      fail("No MW2 files here. Choose the folder that contains main and zone.");
       return;
     }
     const langs = [...new Set(zone.map(f => f.path.split("/")[1]))];
@@ -270,24 +270,24 @@ footer p{margin:0 0 .5rem;max-width:46rem}
     const found = MP_MAPS.filter(m => names.has(m));
 
     const ok = hasMP && found.length > 0;
-    const verdict = ok ? "Мультиплеерные файлы на месте" : "Это не мультиплеерная часть MW2";
-    const sub = ok ? "" : "Не нашлось common_mp.ff или карт. Нужна версия «Multiplayer» из Steam.";
+    const verdict = ok ? "Multiplayer files found" : "This is not the multiplayer part of MW2";
+    const sub = ok ? "" : "common_mp.ff or the maps are missing. You need the Multiplayer depot from Steam.";
 
     out.hidden = false;
     out.innerHTML = `
       <p class="verdict ${ok ? "" : "bad"}"></p>
-      <div class="bar" role="img" aria-label="Соотношение зон и архивов"><span class="seg-zone" style="width:${(zBytes / total * 100).toFixed(1)}%"></span><span class="seg-iwd" style="width:${(iBytes / total * 100).toFixed(1)}%"></span></div>
-      <div class="legend"><span><i style="background:var(--amber)"></i>зоны .ff: <b data-z></b></span><span><i style="background:var(--ok)"></i>архивы .iwd: <b data-i></b></span></div>
-      <dl class="facts"><div><dt>Всего на диске</dt><dd data-t></dd></div><div><dt>Язык озвучки и интерфейса</dt><dd data-l></dd></div><div><dt>Карт мультиплеера</dt><dd data-m></dd></div></dl>
-      <ul class="maps" aria-label="Найденные карты"></ul>
+      <div class="bar" role="img" aria-label="Zones versus archives"><span class="seg-zone" style="width:${(zBytes / total * 100).toFixed(1)}%"></span><span class="seg-iwd" style="width:${(iBytes / total * 100).toFixed(1)}%"></span></div>
+      <div class="legend"><span><i style="background:var(--amber)"></i>.ff zones: <b data-z></b></span><span><i style="background:var(--ok)"></i>.iwd archives: <b data-i></b></span></div>
+      <dl class="facts"><div><dt>Total on disk</dt><dd data-t></dd></div><div><dt>Voice and UI language</dt><dd data-l></dd></div><div><dt>Multiplayer maps</dt><dd data-m></dd></div></dl>
+      <ul class="maps" aria-label="Maps found"></ul>
       <p class="hint" data-sub></p>`;
     out.querySelector(".verdict").textContent = verdict;
     out.querySelector("[data-z]").textContent = fmt(zBytes);
     out.querySelector("[data-i]").textContent = fmt(iBytes);
     out.querySelector("[data-t]").textContent = fmt(total);
     out.querySelector("[data-l]").textContent = langs.join(", ");
-    out.querySelector("[data-m]").textContent = found.length + " из " + MP_MAPS.length;
-    out.querySelector("[data-sub]").textContent = sub || "Выделены карты, для которых уже собран пак. Остальные движок прочитает из вашей папки.";
+    out.querySelector("[data-m]").textContent = found.length + " of " + MP_MAPS.length;
+    out.querySelector("[data-sub]").textContent = sub || "Maps with a ready-made pack are highlighted. The engine reads the others from your folder.";
     const ul = out.querySelector(".maps");
     MP_MAPS.forEach(m => {
       const li = document.createElement("li");
