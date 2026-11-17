@@ -2237,7 +2237,7 @@ fn dispatch_console_command(
             );
             let line = format!(
                 "benchmark-mark: pid={} seq={} ns={ns} label={label}{rss}{heap}{facts}",
-                std::process::id(),
+                (if cfg!(target_arch = "wasm32") { 0_u32 } else { std::process::id() }),
                 *mark_sequence
             );
             perf::benchmark_mark(label, *mark_sequence, ns as u64);

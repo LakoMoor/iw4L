@@ -411,7 +411,7 @@ pub fn script_boundary(name: &str, detail: &str) {
 fn controller_line(prefix: &str, name: &str, detail: &str) {
     let line = format!(
         "{prefix}: {name} pid={} ns={}{detail}",
-        std::process::id(),
+        (if cfg!(target_arch = "wasm32") { 0_u32 } else { std::process::id() }),
         process_elapsed_ns()
     );
     write_event(Channel::Launch, Level::Info, &line, None, None);

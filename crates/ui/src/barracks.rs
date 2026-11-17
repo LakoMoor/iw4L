@@ -146,7 +146,7 @@ pub(crate) fn save_profile(catalog: Res<MenuCatalog>, mut profile: ResMut<Barrac
         killstreaks: [a, b, c],
     } = profile.selection;
     let contents = format!("iw4l-barracks-1\n{title} {emblem} {a} {b} {c}\n");
-    let pending = path.with_extension(format!("{}.tmp", std::process::id()));
+    let pending = path.with_extension(format!("{}.tmp", (if cfg!(target_arch = "wasm32") { 0_u32 } else { std::process::id() })));
     let result = (|| -> std::io::Result<()> {
         use std::io::Write;
         std::fs::create_dir_all(path.parent().unwrap())?;

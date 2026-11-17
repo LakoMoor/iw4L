@@ -369,7 +369,7 @@ fn write_class_file(path: &std::path::Path, contents: &str) -> std::io::Result<(
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let pending = path.with_extension(format!("{}.tmp", std::process::id()));
+    let pending = path.with_extension(format!("{}.tmp", (if cfg!(target_arch = "wasm32") { 0_u32 } else { std::process::id() })));
     let result = (|| {
         let mut output = std::fs::File::create(&pending)?;
         output.write_all(contents.as_bytes())?;

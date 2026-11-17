@@ -78,7 +78,7 @@ pub fn cache_put_with(
 fn unique_temp(parent: &Path, key: &str) -> Result<PathBuf, String> {
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
     let n = SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    Ok(parent.join(format!("{key}.{}.{n:x}.tmp", std::process::id())))
+    Ok(parent.join(format!("{key}.{}.{n:x}.tmp", (if cfg!(target_arch = "wasm32") { 0_u32 } else { std::process::id() }))))
 }
 
 pub struct CacheFlight {
