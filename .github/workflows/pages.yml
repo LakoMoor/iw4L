@@ -33,12 +33,18 @@ jobs:
         with:
           tool: wasm-bindgen-cli@0.2.129
       - name: Build the engine for the browser
-        run: cargo build --target wasm32-unknown-unknown -p iw4l-web --profile play
+        run: cargo build --target wasm32-unknown-unknown -p iw4l-web --profile web
         env:
           CC_wasm32_unknown_unknown: clang
       - name: Bind to JavaScript
         run: |
-          wasm-bindgen --target web --out-dir web/pkg target/wasm32-unknown-unknown/play/iw4l_web.wasm
+          wasm-bindgen --target web --out-dir web/pkg target/wasm32-unknown-unknown/web/iw4l_web.wasm
+      - name: Shrink the wasm
+        run: |
+          sudo apt-get install -y binaryen
+          wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --enable-sign-ext --enable-mutable-globals --enable-reference-types --enable-simd -o web/pkg/opt.wasm web/pkg/iw4l_web_bg.wasm
+          mv web/pkg/opt.wasm web/pkg/iw4l_web_bg.wasm
+          ls -l web/pkg
       - name: Remove local-only files
         run: rm -f web/serve.js
       - uses: actions/configure-pages@v5

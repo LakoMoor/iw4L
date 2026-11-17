@@ -244,3 +244,12 @@ strip = "symbols"
 inherits = "play"
 debug = 1
 strip = "none"
+
+# The browser build: size over speed per byte shipped, then wasm-opt in CI.
+[profile.web]
+inherits = "release"
+opt-level = "s"
+lto = "thin"
+codegen-units = 4
+strip = "symbols"
+panic = "abort"
