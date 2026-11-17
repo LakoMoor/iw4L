@@ -122,7 +122,7 @@ impl IwdIndex {
     }
 
     fn open_uncached(directory: &Path) -> Result<Self, String> {
-        let mut archives = std::fs::read_dir(directory)
+        let mut archives = vfs::read_dir(directory)
             .map_err(|error| format!("cannot read IWD directory {}: {error}", directory.display()))?
             .filter_map(Result::ok)
             .map(|entry| entry.path())
@@ -184,7 +184,7 @@ fn is_iwd_archive(path: &Path) -> bool {
 }
 
 fn index_image_entries(path: &Path) -> Result<Vec<(String, IwdFile)>, String> {
-    let file = std::fs::File::open(path)
+    let file = vfs::File::open(path)
         .map_err(|error| format!("cannot open {}: {error}", path.display()))?;
     let archive = zip::ZipArchive::new(std::io::BufReader::new(file))
         .map_err(|error| format!("cannot index {}: {error}", path.display()))?;
@@ -222,7 +222,7 @@ fn index_image_entries(path: &Path) -> Result<Vec<(String, IwdFile)>, String> {
     Ok(entries)
 }
 
-type OpenArchive = zip::ZipArchive<std::io::BufReader<std::fs::File>>;
+type OpenArchive = zip::ZipArchive<std::io::BufReader<vfs::File>>;
 
 static PARKED: OnceLock<Mutex<HashMap<PathBuf, Vec<OpenArchive>>>> = OnceLock::new();
 
@@ -264,8 +264,8 @@ impl ArchiveLease {
                 archive: Some(archive),
             });
         }
-        let opened_at = std::time::Instant::now();
-        let disk = std::fs::File::open(path)
+        let opened_at = web_time::Instant::now();
+        let disk = vfs::File::open(path)
             .map_err(|error| format!("cannot open {}: {error}", path.display()))?;
         let archive = zip::ZipArchive::new(std::io::BufReader::new(disk))
             .map_err(|error| format!("cannot read {}: {error}", path.display()))?;
@@ -310,7 +310,7 @@ fn read_indexed_entry(file: &IwdFile, limit: Option<usize>) -> Result<Vec<u8>, S
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     trace_entry(&file.archive, &file.entry);
-    let inflate_at = std::time::Instant::now();
+    let inflate_at = web_time::Instant::now();
     let mut entry = archive.by_name(&file.entry).map_err(|error| {
         format!(
             "cannot read {} in {}: {error}",
@@ -337,7 +337,7 @@ fn read_pooled_entry(
         .as_mut()
         .expect("lease holds its reader until drop");
     trace_entry(archive_path, entry_name);
-    let inflate_at = std::time::Instant::now();
+    let inflate_at = web_time::Instant::now();
     let mut entry = archive.by_name(entry_name).map_err(|error| {
         format!("cannot open IWD entry {entry_name} in {archive_path:?}: {error}")
     })?;
@@ -352,11 +352,11 @@ fn read_pooled_entry(
 /// engine reads is appended once as `archive<TAB>entry`. A pack built from
 /// those traces holds exactly what a session touched.
 fn trace_entry(archive: &Path, entry: &str) {
-    static SINK: OnceLock<Option<Mutex<(std::fs::File, std::collections::HashSet<String>)>>> =
+    static SINK: OnceLock<Option<Mutex<(vfs::File, std::collections::HashSet<String>)>>> =
         OnceLock::new();
     let sink = SINK.get_or_init(|| {
         let path = std::env::var_os("IW4L_PACK_TRACE")?;
-        let file = std::fs::OpenOptions::new()
+        let file = vfs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(path)
@@ -449,7 +449,7 @@ pub fn iwd_read_cost() -> (f64, u64, f64) {
 pub fn game_main_for_zone(zone_ff: &Path) -> Result<PathBuf, String> {
     for ancestor in zone_ff.ancestors() {
         let main = ancestor.join("main");
-        if main.is_dir() {
+        if vfs::is_dir(&main) {
             return Ok(main);
         }
     }
@@ -467,13 +467,13 @@ pub fn game_mains_by_root(games_root: &Path) -> Vec<Vec<PathBuf>> {
             let mut stack = vec![root];
             while let Some(dir) = stack.pop() {
                 let main = dir.join("main");
-                if main.is_dir() {
+                if vfs::is_dir(&main) {
                     mains.push(main);
                 }
-                if let Ok(entries) = std::fs::read_dir(&dir) {
+                if let Ok(entries) = vfs::read_dir(&dir) {
                     for entry in entries.flatten() {
                         let path = entry.path();
-                        if path.is_dir() {
+                        if vfs::is_dir(&path) {
                             stack.push(path);
                         }
                     }
@@ -503,7 +503,7 @@ pub fn read_iwd_named(games_root: &Path, want: &str) -> Option<Vec<u8>> {
         .rev()
         .collect();
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
+        let Ok(entries) = vfs::read_dir(&dir) else {
             continue;
         };
         let mut paths = entries
@@ -512,14 +512,14 @@ pub fn read_iwd_named(games_root: &Path, want: &str) -> Option<Vec<u8>> {
             .collect::<Vec<_>>();
         paths.sort();
         for path in paths {
-            if path.is_dir() {
+            if vfs::is_dir(&path) {
                 stack.push(path);
                 continue;
             }
             if !is_iwd_archive(&path) {
                 continue;
             }
-            let Ok(file) = std::fs::File::open(&path) else {
+            let Ok(file) = vfs::File::open(&path) else {
                 continue;
             };
             let Ok(mut archive) = zip::ZipArchive::new(file) else {
@@ -542,7 +542,7 @@ pub fn read_iwd_named(games_root: &Path, want: &str) -> Option<Vec<u8>> {
 }
 
 pub fn read_text(path: &Path) -> Result<String, String> {
-    std::fs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))
+    vfs::read_to_string(path).map_err(|error| format!("read {}: {error}", path.display()))
 }
 
 pub fn inflate_zlib(data: &[u8]) -> Result<Vec<u8>, String> {
@@ -587,7 +587,7 @@ fn archive_language(path: &Path) -> Option<String> {
 impl IwdSoundIndex {
     pub fn open(directory: impl AsRef<Path>) -> Result<Self, String> {
         let directory = directory.as_ref();
-        let mut archives = std::fs::read_dir(directory)
+        let mut archives = vfs::read_dir(directory)
             .map_err(|e| format!("cannot read {}: {e}", directory.display()))?
             .filter_map(std::result::Result::ok)
             .map(|e| e.path())
@@ -597,7 +597,7 @@ impl IwdSoundIndex {
 
         let mut sounds = HashMap::new();
         for path in archives {
-            let file = std::fs::File::open(&path)
+            let file = vfs::File::open(&path)
                 .map_err(|e| format!("cannot open {}: {e}", path.display()))?;
 
             let archive = zip::ZipArchive::new(std::io::BufReader::new(file))
@@ -646,17 +646,17 @@ pub fn installation_revision(root: &Path) -> u64 {
         seen: &mut std::collections::HashSet<PathBuf>,
         rows: &mut Vec<(PathBuf, u64)>,
     ) {
-        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let canonical = vfs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         if !seen.insert(canonical) {
             return;
         }
-        let Ok(entries) = std::fs::read_dir(path) else {
+        let Ok(entries) = vfs::read_dir(path) else {
             return;
         };
         let mut paths: Vec<_> = entries.flatten().map(|entry| entry.path()).collect();
         paths.sort();
         for path in paths {
-            let Ok(meta) = std::fs::metadata(&path) else {
+            let Ok(meta) = vfs::metadata(&path) else {
                 continue;
             };
             if meta.is_dir() {
@@ -681,7 +681,7 @@ pub fn installation_revision(root: &Path) -> u64 {
 pub(crate) fn file_revision(path: &Path) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut hash = std::collections::hash_map::DefaultHasher::new();
-    if let Ok(meta) = std::fs::metadata(path) {
+    if let Ok(meta) = vfs::metadata(path) {
         meta.len().hash(&mut hash);
         meta.modified().ok().hash(&mut hash);
         meta.created().ok().hash(&mut hash);

@@ -6,6 +6,8 @@ license.workspace = true
 description = "Local film editing, timeline navigation and camera tracks."
 
 [dependencies]
+vfs = { path = "../vfs" }
+web-time = "1"
 bevy.workspace = true
 frame.workspace = true
 net.workspace = true

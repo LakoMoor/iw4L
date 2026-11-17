@@ -2,7 +2,8 @@ use std::io::{BufWriter, Write};
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{SyncSender, sync_channel};
-use std::time::{Duration, Instant};
+use std::time::{Duration};
+use web_time::{Instant};
 
 static SINK: OnceLock<Option<Sink>> = OnceLock::new();
 static DROPPED: AtomicU64 = AtomicU64::new(0);

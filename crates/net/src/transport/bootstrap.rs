@@ -229,10 +229,10 @@ pub struct BootstrapLane {
         VecDeque<(
             Option<master_protocol::MemberId>,
             Vec<u8>,
-            std::time::Instant,
+            web_time::Instant,
         )>,
     >,
-    from_worker: Mutex<VecDeque<(BootstrapIngress, std::time::Instant)>>,
+    from_worker: Mutex<VecDeque<(BootstrapIngress, web_time::Instant)>>,
     fault: Mutex<Option<&'static str>>,
     acks: Mutex<VecDeque<BootstrapAck>>,
     epoch: AtomicU32,
@@ -310,7 +310,7 @@ impl BootstrapLane {
         queue.push_back((
             peer,
             bytes,
-            std::time::Instant::now() + super::master::limits::values().queue_age,
+            web_time::Instant::now() + super::master::limits::values().queue_age,
         ));
         Ok(())
     }
@@ -320,7 +320,7 @@ impl BootstrapLane {
         let entries: Vec<_> = queue.drain(..).collect();
         if entries
             .iter()
-            .any(|(_, _, deadline)| *deadline <= std::time::Instant::now())
+            .any(|(_, _, deadline)| *deadline <= web_time::Instant::now())
         {
             *self.fault.lock().expect("bootstrap fault poisoned") =
                 Some("bootstrap queue deadline");
@@ -351,7 +351,7 @@ impl BootstrapLane {
         }
         queue.push_back((
             BootstrapIngress { member_id, bytes },
-            std::time::Instant::now() + super::master::limits::values().queue_age,
+            web_time::Instant::now() + super::master::limits::values().queue_age,
         ));
         Ok(())
     }
@@ -361,7 +361,7 @@ impl BootstrapLane {
         let entries: Vec<_> = queue.drain(..).collect();
         if entries
             .iter()
-            .any(|(_, deadline)| *deadline <= std::time::Instant::now())
+            .any(|(_, deadline)| *deadline <= web_time::Instant::now())
         {
             *self.fault.lock().expect("bootstrap fault poisoned") =
                 Some("bootstrap ingress queue deadline");
@@ -371,7 +371,7 @@ impl BootstrapLane {
     }
 
     pub fn check_deadline(&self) -> Result<(), &'static str> {
-        let now = std::time::Instant::now();
+        let now = web_time::Instant::now();
         if self
             .to_worker
             .lock()

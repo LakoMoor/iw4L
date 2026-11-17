@@ -679,7 +679,7 @@ struct PostFxTextureCache {
 
 struct PostFxPipelineWait {
     owner: MaterialGenerationId,
-    started: std::time::Instant,
+    started: web_time::Instant,
     reported: bool,
 }
 
@@ -687,7 +687,7 @@ impl PostFxPipelineWait {
     fn update(
         wait: &mut Option<Self>,
         owner: MaterialGenerationId,
-        now: std::time::Instant,
+        now: web_time::Instant,
     ) -> Option<std::time::Duration> {
         if wait.as_ref().is_none_or(|wait| wait.owner != owner) {
             *wait = Some(Self {
@@ -872,7 +872,7 @@ fn draw_postfx(
                 if let Some(elapsed) = PostFxPipelineWait::update(
                     &mut pipeline_wait,
                     gpu.prepared[0].film.generation,
-                    std::time::Instant::now(),
+                    web_time::Instant::now(),
                 ) {
                     diag::warn!(
                         World,

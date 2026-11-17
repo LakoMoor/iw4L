@@ -1471,7 +1471,7 @@ pub fn unapplied_decoded_bytes() -> u64 {
 /// which of the two the time went to.
 fn wait_for_decode_budget() -> (u64, bool) {
     let budget = decode_budget_bytes();
-    let since = std::time::Instant::now();
+    let since = web_time::Instant::now();
     let mut waited = false;
     while UNAPPLIED_BATCHES.load(Ordering::Relaxed) > 0 && gated_payload_bytes() >= budget {
         if since.elapsed() >= BUDGET_WAIT_LIMIT {

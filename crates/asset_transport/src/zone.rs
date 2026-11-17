@@ -192,7 +192,7 @@ static SHARED_MISS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64:
 type ZoneSourceKey = (std::path::PathBuf, u64);
 
 fn source_key(path: &Path) -> Option<ZoneSourceKey> {
-    std::fs::metadata(path).ok()?;
+    vfs::metadata(path).ok()?;
     Some((path.to_owned(), crate::iwd::file_revision(path)))
 }
 
@@ -225,7 +225,7 @@ fn flight_for(key: &ZoneSourceKey) -> Arc<Mutex<()>> {
 
 pub fn open_zone(path: impl AsRef<Path>) -> Result<ZoneImage, ZoneOpenError> {
     let path = path.as_ref();
-    let result = std::fs::read(path)
+    let result = vfs::read(path)
         .map_err(ZoneOpenError::Io)
         .and_then(|bytes| parse_zone_image(&bytes));
     let image = result.map_err(|source| ZoneOpenError::AtPath {
@@ -535,7 +535,7 @@ impl std::fmt::Display for T6ZoneError {
 impl std::error::Error for T6ZoneError {}
 
 pub fn open_t6_zone(path: impl AsRef<Path>) -> Result<T6ZoneImage, T6ZoneError> {
-    let bytes = std::fs::read(path).map_err(T6ZoneError::Io)?;
+    let bytes = vfs::read(path).map_err(T6ZoneError::Io)?;
     parse_t6_zone_image(&bytes)
 }
 

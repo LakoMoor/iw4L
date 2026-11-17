@@ -80,7 +80,7 @@ struct ShellUiImages(asset_material::UiImagePublication);
 struct ShellCommonTask {
     task: bevy::tasks::Task<assets::ShellCommon>,
     perk_table: Option<asset_game::CapturedStringTable>,
-    started: std::time::Instant,
+    started: web_time::Instant,
 }
 
 fn start_shell_common_prepare(
@@ -98,7 +98,7 @@ fn start_shell_common_prepare(
     commands.insert_resource(ShellCommonTask {
         task: assets::load_pool().spawn(assets::load_shell_common(games)),
         perk_table: menus.string_table("mp/perkTable.csv").cloned(),
-        started: std::time::Instant::now(),
+        started: web_time::Instant::now(),
     });
     commands.insert_resource(frame::FrontendContentLoading);
 }
@@ -481,7 +481,7 @@ fn run_menu(
     app.insert_resource(ShellCommonTask {
         task: shell_common,
         perk_table: menus.string_table("mp/perkTable.csv").cloned(),
-        started: std::time::Instant::now(),
+        started: web_time::Instant::now(),
     })
     .insert_resource(frame::FrontendContentLoading);
     register_shell_common_systems(&mut app);

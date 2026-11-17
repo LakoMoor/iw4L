@@ -3,7 +3,8 @@ use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::{Duration};
+use web_time::{Instant};
 
 use bevy::prelude::Resource;
 
@@ -746,7 +747,7 @@ fn control(
             ) {
                 Ok(true) => {}
                 Ok(false) => {
-                    if std::time::Instant::now() >= work.request.execution.deadline {
+                    if web_time::Instant::now() >= work.request.execution.deadline {
                         work.complete(crate::StartOutcome::Failed(crate::StartFailure::Expired));
                     } else {
                         pending_cues.push_back(work);

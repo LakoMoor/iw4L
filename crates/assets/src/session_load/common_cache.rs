@@ -139,7 +139,7 @@ pub struct CommonSet {
     pub(super) retained: std::sync::Mutex<asset_material::material_images::PayloadRetention>,
     pub(super) cac_tables: Vec<(asset_core::AssetNamespace, asset_game::CapturedStringTable)>,
     pub(super) prepared_ms: f32,
-    pub(super) ready_at: std::time::Instant,
+    pub(super) ready_at: web_time::Instant,
 }
 
 impl CommonSet {
@@ -379,7 +379,7 @@ pub async fn load_shell_common(games: asset_transport::GamesRoot) -> ShellCommon
 }
 
 async fn prepare_common(key: CommonKey) -> Arc<CommonSet> {
-    let started = std::time::Instant::now();
+    let started = web_time::Instant::now();
     let progress = LoadProgress::default();
     let pool = load_pool();
     let anchor = key.runtime.clone();
@@ -995,7 +995,7 @@ async fn prepare_common(key: CommonKey) -> Arc<CommonSet> {
         retained: std::sync::Mutex::new(Default::default()),
         cac_tables,
         prepared_ms,
-        ready_at: std::time::Instant::now(),
+        ready_at: web_time::Instant::now(),
     })
 }
 

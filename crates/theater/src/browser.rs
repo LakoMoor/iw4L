@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use web_time::SystemTime;
 
 use bevy::prelude::*;
 use bevy::tasks::{AsyncComputeTaskPool, Task, futures_lite::future};
@@ -126,12 +126,9 @@ fn scan(root: PathBuf) -> Result<Vec<FilmEntry>, String> {
             Err(error) => (String::new(), 0, Some(error)),
         };
         entries.push(FilmEntry {
-            preview: path
-                .with_extension("png")
-                .is_file()
+            preview: vfs::is_file(path.with_extension("png"))
                 .then(|| path.with_extension("png")),
-            modified: path
-                .metadata()
+            modified: vfs::metadata(&path)
                 .and_then(|m| m.modified())
                 .unwrap_or(SystemTime::UNIX_EPOCH),
             path,

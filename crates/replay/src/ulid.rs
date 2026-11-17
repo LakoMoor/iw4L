@@ -1,5 +1,6 @@
 use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use web_time::UNIX_EPOCH;
+use web_time::{SystemTime};
 
 const ENCODING: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 

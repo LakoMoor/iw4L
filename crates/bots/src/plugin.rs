@@ -516,7 +516,7 @@ fn think_bots(mut p: ThinkBots) {
             else {
                 continue;
             };
-            let started = std::time::Instant::now();
+            let started = web_time::Instant::now();
             let mut cmd = brain.drive_nav(
                 &obs,
                 &mut queried,
@@ -687,7 +687,7 @@ fn navigation_for(world: &mut SimWorld, digest: u64) -> NavGraph {
         );
         return graph;
     }
-    let started = std::time::Instant::now();
+    let started = web_time::Instant::now();
     let mut graph = NavGraph::default();
     bake_navigation(world, &mut graph);
     diag::info!(

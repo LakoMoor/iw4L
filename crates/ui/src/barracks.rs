@@ -7,7 +7,7 @@ pub struct BarracksProfile {
     pub loaded: bool,
     path: Option<std::path::PathBuf>,
     written: Option<sim::PlayerProfile>,
-    retry_at: Option<std::time::Instant>,
+    retry_at: Option<web_time::Instant>,
 }
 
 pub fn reward_rows(catalog: &MenuCatalog) -> Vec<u32> {
@@ -132,7 +132,7 @@ pub(crate) fn save_profile(catalog: Res<MenuCatalog>, mut profile: ResMut<Barrac
         || profile.written == Some(profile.selection)
         || profile
             .retry_at
-            .is_some_and(|at| std::time::Instant::now() < at)
+            .is_some_and(|at| web_time::Instant::now() < at)
         || !valid_profile(&catalog, profile.selection)
     {
         return;
@@ -163,7 +163,7 @@ pub(crate) fn save_profile(catalog: Res<MenuCatalog>, mut profile: ResMut<Barrac
         }
         Err(error) => {
             let _ = std::fs::remove_file(pending);
-            profile.retry_at = Some(std::time::Instant::now() + std::time::Duration::from_secs(5));
+            profile.retry_at = Some(web_time::Instant::now() + std::time::Duration::from_secs(5));
             diag::warn!(Ui, "barracks: cannot write {}: {error}", path.display());
         }
     }

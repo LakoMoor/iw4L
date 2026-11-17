@@ -233,6 +233,15 @@ impl ReadAt for Vec<u8> {
     }
 }
 
+impl ReadAt for std::sync::Arc<Vec<u8>> {
+    fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, Error> {
+        self.as_ref().read_at(offset, len)
+    }
+    fn len(&self) -> Result<u64, Error> {
+        Ok(self.as_slice().len() as u64)
+    }
+}
+
 pub struct Pack<R: ReadAt> {
     pub index: Index,
     source: R,

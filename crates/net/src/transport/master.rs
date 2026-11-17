@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::{Duration};
+use web_time::{Instant};
 
 use bevy::prelude::*;
 use master_protocol::{

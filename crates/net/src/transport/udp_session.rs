@@ -36,9 +36,9 @@ pub(crate) const CMDS_PER_PACKET: usize = 16;
 pub struct RelayMailbox {
     inbound: Arc<Mutex<DataLanes>>,
     outbound: Arc<Mutex<DataLanes>>,
-    control_inbound: Arc<Mutex<Vec<(MemberId, Vec<u8>, std::time::Instant)>>>,
+    control_inbound: Arc<Mutex<Vec<(MemberId, Vec<u8>, web_time::Instant)>>>,
     control_inbound_drained: Arc<tokio::sync::Notify>,
-    control_outbound: Arc<Mutex<Vec<(MemberId, Vec<u8>, std::time::Instant)>>>,
+    control_outbound: Arc<Mutex<Vec<(MemberId, Vec<u8>, web_time::Instant)>>>,
     cap: usize,
 }
 
@@ -96,7 +96,7 @@ impl RelayMailbox {
     }
 
     pub(crate) fn check_control_deadlines(&self) -> Result<(), &'static str> {
-        let now = std::time::Instant::now();
+        let now = web_time::Instant::now();
         for queue in [&self.control_inbound, &self.control_outbound] {
             if queue
                 .lock()
@@ -133,7 +133,7 @@ impl RelayMailbox {
 
 #[derive(Debug, Default)]
 struct DataLanes {
-    lanes: BTreeMap<MemberId, VecDeque<(Vec<u8>, std::time::Instant)>>,
+    lanes: BTreeMap<MemberId, VecDeque<(Vec<u8>, web_time::Instant)>>,
     bytes: usize,
 }
 
@@ -160,7 +160,7 @@ impl DataLanes {
         self.bytes += bytes.len();
         lane.push_back((
             bytes,
-            std::time::Instant::now() + super::master::limits::values().queue_age,
+            web_time::Instant::now() + super::master::limits::values().queue_age,
         ));
         dropped
     }
@@ -171,7 +171,7 @@ impl DataLanes {
         for (member, lane) in std::mem::take(&mut self.lanes) {
             out.extend(
                 lane.into_iter()
-                    .filter(|(_, deadline)| *deadline > std::time::Instant::now())
+                    .filter(|(_, deadline)| *deadline > web_time::Instant::now())
                     .map(|(bytes, _)| (member, bytes)),
             );
         }
@@ -184,7 +184,7 @@ fn lock_lanes(lanes: &Mutex<DataLanes>) -> std::sync::MutexGuard<'_, DataLanes> 
 }
 
 fn push_mail(
-    queue: &Mutex<Vec<(MemberId, Vec<u8>, std::time::Instant)>>,
+    queue: &Mutex<Vec<(MemberId, Vec<u8>, web_time::Instant)>>,
     cap: usize,
     member: MemberId,
     bytes: Vec<u8>,
@@ -202,13 +202,13 @@ fn push_mail(
     queue.push((
         member,
         bytes,
-        std::time::Instant::now() + super::master::limits::values().queue_age,
+        web_time::Instant::now() + super::master::limits::values().queue_age,
     ));
     Ok(())
 }
 
 fn take_mail(
-    queue: &Mutex<Vec<(MemberId, Vec<u8>, std::time::Instant)>>,
+    queue: &Mutex<Vec<(MemberId, Vec<u8>, web_time::Instant)>>,
 ) -> Vec<(MemberId, Vec<u8>)> {
     std::mem::take(&mut *queue.lock().expect("relay mailbox poisoned"))
         .into_iter()

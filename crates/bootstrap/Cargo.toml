@@ -19,6 +19,8 @@ bevy-debug = ["bevy/debug", "bevy/track_location"]
 bevy-trace = ["bevy/trace", "bevy/trace_chrome"]
 
 [dependencies]
+vfs = { path = "../vfs" }
+web-time = "1"
 bevy.workspace = true
 asset_audio.workspace = true
 asset_core.workspace = true

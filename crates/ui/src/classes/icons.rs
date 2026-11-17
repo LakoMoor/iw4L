@@ -77,7 +77,7 @@ fn decode_class_select_icons(
     publication: &asset_material::UiImagePublication,
     games: &std::path::Path,
 ) -> DecodedClassIcons {
-    let started = std::time::Instant::now();
+    let started = web_time::Instant::now();
     let mut stems = Vec::new();
     for preset in showcase_classes() {
         if let Some(stem) = CacItemPresentation::prepare_weapon(preset.primary).archive_image() {

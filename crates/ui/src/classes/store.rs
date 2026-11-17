@@ -187,7 +187,7 @@ pub(crate) struct ClassStoreFile {
     path: Option<std::path::PathBuf>,
     loaded: bool,
     written: Option<String>,
-    retry_at: Option<std::time::Instant>,
+    retry_at: Option<web_time::Instant>,
 }
 
 fn clean_field(value: &str) -> String {
@@ -311,8 +311,8 @@ pub(crate) fn load_class_store(
     let path = identity.artifacts.join("profile").join("classes.txt");
     file.loaded = true;
     let generate = || {
-        let seed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let seed = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .map_or(0, |elapsed| elapsed.as_nanos() as u64);
         SessionClassStore::from_showcase(seed, registry)
     };
@@ -392,7 +392,7 @@ pub(crate) fn save_class_store(
         || store.slots.is_empty()
         || file
             .retry_at
-            .is_some_and(|at| std::time::Instant::now() < at)
+            .is_some_and(|at| web_time::Instant::now() < at)
     {
         return;
     }
@@ -427,7 +427,7 @@ pub(crate) fn save_class_store(
         }
         Err(error) => {
             diag::warn!(Ui, "classes: cannot write {}: {error}", path.display());
-            file.retry_at = Some(std::time::Instant::now() + std::time::Duration::from_secs(5));
+            file.retry_at = Some(web_time::Instant::now() + std::time::Duration::from_secs(5));
         }
     }
 }

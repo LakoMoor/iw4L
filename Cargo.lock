@@ -386,6 +386,8 @@ dependencies = [
  "fastfile_iw5",
  "fastfile_t5",
  "fastfile_t6",
+ "vfs",
+ "web-time",
 ]
 
 [[package]]
@@ -416,7 +418,9 @@ dependencies = [
  "serde",
  "serde_json",
  "structured_data_iw4",
+ "vfs",
  "weapon_iw4",
+ "web-time",
  "xmodel_runtime",
 ]
 
@@ -446,6 +450,7 @@ dependencies = [
  "fastfile_t5",
  "lighting_iw4",
  "render_material",
+ "web-time",
 ]
 
 [[package]]
@@ -481,6 +486,8 @@ dependencies = [
  "lnk",
  "lzokay-native",
  "miniz_oxide",
+ "vfs",
+ "web-time",
  "windows",
  "windows-sys 0.61.2",
  "zip",
@@ -537,7 +544,9 @@ dependencies = [
  "render_material",
  "serde_json",
  "structured_data_iw4",
+ "vfs",
  "weapon_iw4",
+ "web-time",
  "xmodel_runtime",
 ]
 
@@ -670,6 +679,8 @@ dependencies = [
  "playerstate_iw4",
  "sim",
  "symphonia",
+ "vfs",
+ "web-time",
 ]
 
 [[package]]
@@ -2214,6 +2225,8 @@ dependencies = [
  "sim",
  "theater",
  "ui",
+ "vfs",
+ "web-time",
 ]
 
 [[package]]
@@ -2235,6 +2248,7 @@ dependencies = [
  "sim",
  "trace_iw4",
  "weapon_iw4",
+ "web-time",
 ]
 
 [[package]]
@@ -2438,6 +2452,7 @@ dependencies = [
  "session",
  "sim",
  "ui",
+ "web-time",
 ]
 
 [[package]]
@@ -2791,6 +2806,7 @@ dependencies = [
  "mimalloc",
  "serde",
  "serde_json",
+ "web-time",
  "windows-sys 0.61.2",
 ]
 
@@ -3653,6 +3669,7 @@ dependencies = [
  "sim",
  "structured_data_iw4",
  "weapon_iw4",
+ "web-time",
 ]
 
 [[package]]
@@ -4616,6 +4633,7 @@ dependencies = [
  "tokio-util",
  "updater",
  "weapon_iw4",
+ "web-time",
  "xmodel_runtime",
  "zstd",
 ]
@@ -5225,6 +5243,7 @@ dependencies = [
  "perfetto-sdk",
  "serde_json",
  "uuid",
+ "web-time",
 ]
 
 [[package]]
@@ -5693,6 +5712,7 @@ dependencies = [
  "render_scene",
  "serde",
  "serde_json",
+ "web-time",
 ]
 
 [[package]]
@@ -5729,6 +5749,7 @@ dependencies = [
  "render_scene",
  "sim",
  "weapon_iw4",
+ "web-time",
  "xmodel_runtime",
 ]
 
@@ -5801,6 +5822,7 @@ dependencies = [
  "render_scene",
  "sim",
  "weapon_iw4",
+ "web-time",
  "xmodel_runtime",
 ]
 
@@ -5831,6 +5853,7 @@ dependencies = [
  "render_scene",
  "sim",
  "weapon_iw4",
+ "web-time",
 ]
 
 [[package]]
@@ -5858,6 +5881,7 @@ dependencies = [
  "render_frame",
  "render_material",
  "render_scene",
+ "web-time",
 ]
 
 [[package]]
@@ -5915,6 +5939,7 @@ dependencies = [
  "perf",
  "playerstate_iw4",
  "sim",
+ "web-time",
 ]
 
 [[package]]
@@ -6363,6 +6388,7 @@ dependencies = [
  "render_fx",
  "sim",
  "weapon_iw4",
+ "web-time",
  "xmodel_runtime",
 ]
 
@@ -6434,6 +6460,7 @@ dependencies = [
  "structured_data_iw4",
  "trace_iw4",
  "weapon_iw4",
+ "web-time",
  "xmodel_runtime",
 ]
 
@@ -6846,6 +6873,8 @@ dependencies = [
  "sha2",
  "sim",
  "ui",
+ "vfs",
+ "web-time",
 ]
 
 [[package]]
@@ -7326,6 +7355,7 @@ dependencies = [
  "session",
  "sim",
  "updater",
+ "web-time",
 ]
 
 [[package]]
@@ -7474,6 +7504,14 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
+name = "vfs"
+version = "0.1.0"
+dependencies = [
+ "iw4pk",
+ "web-time",
+]
 
 [[package]]
 name = "walkdir"

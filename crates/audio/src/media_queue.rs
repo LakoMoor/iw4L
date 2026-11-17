@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::sync::{Condvar, Mutex};
-use std::time::Instant;
+use web_time::Instant;
 
 use crate::clip_store::ClipKey;
 

@@ -6,6 +6,8 @@ license.workspace = true
 description = "Sound aliases and mixing."
 
 [dependencies]
+web-time = "1"
+vfs = { path = "../vfs" }
 diag.workspace = true
 bevy.workspace = true
 asset_audio.workspace = true

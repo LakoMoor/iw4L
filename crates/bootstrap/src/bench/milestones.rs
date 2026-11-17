@@ -3,7 +3,7 @@
 //! report turns those stamps into the waterfall.
 
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use web_time::Instant;
 
 use asset_transport::{LoadLaneTiming, LoadProgress};
 use assets::{LoadingScreen, MatchLoadBusy, MatchLoadRequest};
