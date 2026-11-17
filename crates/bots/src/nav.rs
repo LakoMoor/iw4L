@@ -347,6 +347,13 @@ impl<W: BakeTraces> WorldQuery for Baker<'_, W> {
 }
 
 /// Results come back in index order, so a parallel pass merges as the serial loop would.
+#[cfg(target_arch = "wasm32")]
+fn par_map<T: Send>(len: usize, work: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    // The browser has no threads to spread the pass over.
+    (0..len).map(work).collect()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn par_map<T: Send>(len: usize, work: impl Fn(usize) -> T + Sync) -> Vec<T> {
     const CHUNK: usize = 64;
     let lanes = std::thread::available_parallelism()
