@@ -12,10 +12,22 @@
 // Order of attempts: direct UDP first, then relays on 443 for networks that
 // block UDP or sit behind carrier-grade NAT. Replace `turn` with your own
 // relay (coturn on port 443) by setting window.IW4L_ICE before loading.
+// Players behind strict NATs add a relay in the page address:
+//   ?turn=turns:relay.example.com:443?transport=tcp&turnuser=NAME&turnpass=SECRET
+function turnFromAddress() {
+  const q = new URLSearchParams(globalThis.location?.search ?? "");
+  const urls = q.get("turn");
+  if (!urls) return [];
+  const server = { urls: urls.split(",") };
+  if (q.get("turnuser")) { server.username = q.get("turnuser"); server.credential = q.get("turnpass") ?? ""; }
+  return [server];
+}
+
 export const DEFAULT_ICE = {
   iceServers: [
     { urls: ["stun:stun.l.google.com:19302", "stun:stun.cloudflare.com:3478"] },
     ...(globalThis.IW4L_TURN ?? []),
+    ...turnFromAddress(),
   ],
   iceCandidatePoolSize: 2,
 };
