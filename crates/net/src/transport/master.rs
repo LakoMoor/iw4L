@@ -1067,15 +1067,23 @@ fn arm_master_browser(
     let worker_cancel = cancel.clone();
     let target = browser_config.target.clone();
 
-    let worker = std::thread::Builder::new()
-        .name("iw4l-master-browser".into())
-        .spawn(move || browser_worker(target, worker_state, worker_refresh, worker_cancel))
-        .expect("spawn master browser thread");
+    #[cfg(target_arch = "wasm32")]
+    let worker: Option<JoinHandle<()>> = {
+        browser_worker(target, worker_state, worker_refresh, worker_cancel);
+        None
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    let worker = Some(
+        std::thread::Builder::new()
+            .name("iw4l-master-browser".into())
+            .spawn(move || browser_worker(target, worker_state, worker_refresh, worker_cancel))
+            .expect("spawn master browser thread"),
+    );
     commands.insert_resource(MasterBrowser {
         state,
         refresh,
         cancel,
-        worker: Some(worker),
+        worker,
     });
 }
 
@@ -1460,14 +1468,26 @@ fn spawn_worker(role: &'static str, kind: SessionKind, player_name: String) -> M
     let thread_state = Arc::clone(&state);
     let thread_identity = identity;
 
-    let worker = std::thread::Builder::new()
-        .name("iw4l-master-bridge".into())
-        .spawn(move || {
-            if let Err(error) = session_worker(kind, ctx) {
-                publish_failed(&thread_state, thread_identity, error);
-            }
-        })
-        .expect("spawn master bridge thread");
+    // The browser has no thread to park the session on: it runs inline and
+    // reports its outcome through the same state the thread would have.
+    #[cfg(target_arch = "wasm32")]
+    let worker: Option<JoinHandle<()>> = {
+        if let Err(error) = session_worker(kind, ctx) {
+            publish_failed(&thread_state, thread_identity, error);
+        }
+        None
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    let worker = Some(
+        std::thread::Builder::new()
+            .name("iw4l-master-bridge".into())
+            .spawn(move || {
+                if let Err(error) = session_worker(kind, ctx) {
+                    publish_failed(&thread_state, thread_identity, error);
+                }
+            })
+            .expect("spawn master bridge thread"),
+    );
     MasterBridge {
         state,
         commands,
@@ -1478,7 +1498,7 @@ fn spawn_worker(role: &'static str, kind: SessionKind, player_name: String) -> M
         close,
         facts,
         incarnation,
-        worker: Some(worker),
+        worker,
     }
 }
 
