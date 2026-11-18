@@ -155,6 +155,11 @@ function build() {
   document.body.appendChild(root);
 }
 
+/** The page switches layouts when the engine reports a spawn or a menu. */
+export function setTouchMode(next) {
+  if (root && next !== mode) setMode(next);
+}
+
 function setMode(next) {
   mode = next;
   root.dataset.mode = mode;

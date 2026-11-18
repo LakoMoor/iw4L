@@ -1,4 +1,4 @@
-import { enableTouch } from "./touch.js";
+import { enableTouch, setTouchMode } from "./touch.js";
 import { Host, Guest, describePath } from "./rtc.js";
 import init, { mount_shard, run, run_map, net_open, net_close, net_message, net_tick, net_host, net_join_first, net_start, audio_tick, audio_pull } from "./pkg/iw4l_web.js";
 
@@ -240,4 +240,18 @@ export function startAudio() {
     addEventListener('pointerdown', resume);
     addEventListener('keydown', resume);
   } catch (e) { console.warn('audio unavailable', e); }
+}
+
+// Touch layout follows the match: sticks while playing, pointer while a menu is up.
+{
+  let ownClient = "0"; // the hosting tab is client 0; a guest learns its number at signon
+  const original = console.log.bind(console);
+  console.log = (...args) => {
+    original(...args);
+    const line = typeof args[0] === "string" ? args[0] : "";
+    let m;
+    if ((m = line.match(/signon Active epoch=\d+ client=(\d+)/))) ownClient = m[1];
+    else if (line.includes("spawn: script client=" + ownClient + " playing")) setTouchMode("game");
+    else if (line.includes("menu open: ")) setTouchMode("menu");
+  };
 }
