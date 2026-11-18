@@ -151,6 +151,8 @@ pub use transport::master::{
     MasterMatchOffer, MasterMatchStart, MasterMenuAction, PendingMasterMenuAction, SessionIdentity,
     TransportFault, content_inventory, content_names,
 };
+/// The serverless WebRTC relay the browser build runs on (see `web/rtc.js`).
+pub use transport::master::web as web_link;
 pub use transport::meta_wire::{
     SnapshotMetaSectionBytes, WORLD_SYNC_PERIOD_TICKS, WorldObjectSyncDecoder,
     WorldObjectSyncEncoder, decode_world_object_sync_wire, encode_world_object_sync,

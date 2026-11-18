@@ -5,7 +5,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration};
-use web_time::{Instant};
+use web_time::Instant;
+
+/// Deadlines are plain wall-clock instants: tokio's own clock panics in the browser.
+#[cfg(not(target_arch = "wasm32"))]
+type TickInstant = tokio::time::Instant;
+#[cfg(target_arch = "wasm32")]
+type TickInstant = web_time::Instant;
 
 use bevy::prelude::*;
 use master_protocol::{
@@ -33,6 +39,10 @@ use crate::transport::udp_session::{RelayMailbox, UdpAuthorityHub, UdpClientLink
 
 pub(crate) mod limits;
 mod population;
+#[allow(dead_code)]
+mod service;
+#[allow(dead_code)]
+pub mod web;
 pub use population::CommunityPlayerCounts;
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -78,25 +88,25 @@ pub struct MasterOperationResult {
 
 struct QueuedControl {
     frame: ControlFrame,
-    deadline: tokio::time::Instant,
+    deadline: TickInstant,
     _bytes: tokio::sync::OwnedSemaphorePermit,
 }
 
 struct ControlSender {
     tx: tokio::sync::mpsc::Sender<QueuedControl>,
-    pending: Mutex<HashMap<u64, tokio::time::Instant>>,
+    pending: Mutex<HashMap<u64, TickInstant>>,
     outcomes: Arc<Mutex<VecDeque<MasterOperationResult>>>,
     bytes: Arc<tokio::sync::Semaphore>,
 }
 
 impl ControlSender {
-    fn complete_response(&self, response: &ControlResponse) -> Option<tokio::time::Instant> {
+    fn complete_response(&self, response: &ControlResponse) -> Option<TickInstant> {
         let deadline = self
             .pending
             .lock()
             .expect("control requests poisoned")
             .remove(&response.request_id)?;
-        let outcome = if deadline <= tokio::time::Instant::now() {
+        let outcome = if deadline <= TickInstant::now() {
             MasterOperationOutcome::RemoteOutcomeUnknown("response deadline".into())
         } else if let ResponseBody::Error(error) = &response.body {
             MasterOperationOutcome::Refused(error.to_string())
@@ -129,7 +139,7 @@ impl ControlSender {
     }
 
     fn expire(&self, role: &'static str) -> std::result::Result<(), TransportFault> {
-        let now = tokio::time::Instant::now();
+        let now = TickInstant::now();
         let mut pending = self.pending.lock().expect("control requests poisoned");
         if let Some(id) = pending
             .iter()
@@ -199,7 +209,7 @@ fn relay_reassembler() -> Reassembler {
 
 struct QueuedCommand {
     command: MasterBridgeCommand,
-    deadline: tokio::time::Instant,
+    deadline: TickInstant,
 }
 
 fn take_commands(
@@ -210,7 +220,7 @@ fn take_commands(
     let commands = std::mem::take(&mut *queue);
     if commands
         .iter()
-        .any(|command| command.deadline <= tokio::time::Instant::now())
+        .any(|command| command.deadline <= TickInstant::now())
     {
         return Err(TransportFault::new(
             "local_command",
@@ -233,7 +243,7 @@ async fn command_deadline(
             .lock()
             .expect("master command queue poisoned")
             .iter()
-            .any(|command| command.deadline <= tokio::time::Instant::now())
+            .any(|command| command.deadline <= TickInstant::now())
         {
             return TransportFault::new(
                 "local_command",
@@ -850,7 +860,7 @@ impl MasterBridge {
         }
         commands.push(QueuedCommand {
             command,
-            deadline: tokio::time::Instant::now() + limits::values().queue_age,
+            deadline: TickInstant::now() + limits::values().queue_age,
         });
     }
 
@@ -929,7 +939,7 @@ impl Drop for MasterBridge {
         if let Ok(mut queue) = self.commands.lock() {
             queue.push(QueuedCommand {
                 command: MasterBridgeCommand::Shutdown,
-                deadline: tokio::time::Instant::now() + limits::values().shutdown,
+                deadline: TickInstant::now() + limits::values().shutdown,
             });
         }
         self.close.cancel();
@@ -1067,18 +1077,17 @@ fn arm_master_browser(
     let worker_cancel = cancel.clone();
     let target = browser_config.target.clone();
 
-    #[cfg(target_arch = "wasm32")]
-    let worker: Option<JoinHandle<()>> = {
-        browser_worker(target, worker_state, worker_refresh, worker_cancel);
+    let worker: Option<JoinHandle<()>> = if web::inline() {
+        web::spawn_browser(worker_state, worker_refresh, worker_cancel);
         None
+    } else {
+        Some(
+            std::thread::Builder::new()
+                .name("iw4l-master-browser".into())
+                .spawn(move || browser_worker(target, worker_state, worker_refresh, worker_cancel))
+                .expect("spawn master browser thread"),
+        )
     };
-    #[cfg(not(target_arch = "wasm32"))]
-    let worker = Some(
-        std::thread::Builder::new()
-            .name("iw4l-master-browser".into())
-            .spawn(move || browser_worker(target, worker_state, worker_refresh, worker_cancel))
-            .expect("spawn master browser thread"),
-    );
     commands.insert_resource(MasterBrowser {
         state,
         refresh,
@@ -1288,11 +1297,10 @@ fn browser_worker(
 fn browser_worker(
     _target: MasterTarget,
     state: Arc<Mutex<MasterBrowserSnapshot>>,
-    _refresh: Arc<AtomicU64>,
-    _cancel: CancellationToken,
+    refresh: Arc<AtomicU64>,
+    cancel: CancellationToken,
 ) {
-    state.lock().expect("master browser state poisoned").error =
-        Some("the master browser is not available in the browser build".into());
+    web::spawn_browser(state, refresh, cancel);
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1329,7 +1337,7 @@ async fn browse(
             }),
         )
         .await?;
-        let response_deadline = tokio::time::Instant::now() + limits::values().response;
+        let response_deadline = TickInstant::now() + limits::values().response;
         let (generation, adverts) = loop {
             let frame = tokio::select! {
                 _ = cancel.cancelled() => return Ok(()),
@@ -1468,26 +1476,25 @@ fn spawn_worker(role: &'static str, kind: SessionKind, player_name: String) -> M
     let thread_state = Arc::clone(&state);
     let thread_identity = identity;
 
-    // The browser has no thread to park the session on: it runs inline and
-    // reports its outcome through the same state the thread would have.
-    #[cfg(target_arch = "wasm32")]
-    let worker: Option<JoinHandle<()>> = {
-        if let Err(error) = session_worker(kind, ctx) {
+    // The browser has no thread to park the session on: it joins the page's
+    // polling loop instead and reports through the same state.
+    let worker: Option<JoinHandle<()>> = if web::inline() {
+        if let Err(error) = web::spawn_session(kind, ctx) {
             publish_failed(&thread_state, thread_identity, error);
         }
         None
+    } else {
+        Some(
+            std::thread::Builder::new()
+                .name("iw4l-master-bridge".into())
+                .spawn(move || {
+                    if let Err(error) = session_worker(kind, ctx) {
+                        publish_failed(&thread_state, thread_identity, error);
+                    }
+                })
+                .expect("spawn master bridge thread"),
+        )
     };
-    #[cfg(not(target_arch = "wasm32"))]
-    let worker = Some(
-        std::thread::Builder::new()
-            .name("iw4l-master-bridge".into())
-            .spawn(move || {
-                if let Err(error) = session_worker(kind, ctx) {
-                    publish_failed(&thread_state, thread_identity, error);
-                }
-            })
-            .expect("spawn master bridge thread"),
-    );
     MasterBridge {
         state,
         commands,
@@ -1887,12 +1894,8 @@ fn session_worker(kind: SessionKind, ctx: WorkerCtx) -> std::result::Result<(), 
 }
 
 #[cfg(target_arch = "wasm32")]
-fn session_worker(_kind: SessionKind, ctx: WorkerCtx) -> std::result::Result<(), TransportFault> {
-    Err(TransportFault::new(
-        "transport",
-        ctx.role,
-        "the QUIC master transport is not available in the browser build",
-    ))
+fn session_worker(kind: SessionKind, ctx: WorkerCtx) -> std::result::Result<(), TransportFault> {
+    web::spawn_session(kind, ctx)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -2082,7 +2085,7 @@ async fn session_main(
     let mut last_view: Option<RoomView> = None;
     let mut started_epoch = 0_u32;
     let mut leave_request: Option<u64> = None;
-    let mut leave_at: Option<tokio::time::Instant> = None;
+    let mut leave_at: Option<TickInstant> = None;
     let mut closing = false;
     let mut watchdog = tokio::time::interval(WATCHDOG_INTERVAL);
     watchdog.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -2171,7 +2174,7 @@ async fn session_main(
                     );
                     closing = true;
                     leave_request = Some(request_id);
-                    leave_at = Some(tokio::time::Instant::now() + limits::values().shutdown);
+                    leave_at = Some(TickInstant::now() + limits::values().shutdown);
                 }
                 Err(error) => {
                     command_error = Some(error);
@@ -2190,7 +2193,7 @@ async fn session_main(
                 if let Err(error) = enqueue_control(&control_tx, ControlFrame::Request(ControlRequest { request_id: id, body }), role) { break Err(error); }
                 closing = true;
                 leave_request = Some(id);
-                leave_at = Some(tokio::time::Instant::now() + limits::values().shutdown);
+                leave_at = Some(TickInstant::now() + limits::values().shutdown);
             }
             _ = async {
                 match leave_at {
@@ -2355,7 +2358,7 @@ fn enqueue_control(
         .clone()
         .try_acquire_many_owned(encoded.len() as u32)
         .map_err(|_| TransportFault::new("control_write", role, "control byte budget exhausted"))?;
-    let deadline = tokio::time::Instant::now() + limits::values().queue_age;
+    let deadline = TickInstant::now() + limits::values().queue_age;
     let id = match &frame {
         ControlFrame::Request(request) => Some(request.request_id),
         _ => None,
@@ -2381,7 +2384,7 @@ fn enqueue_control(
     )
     .map_err(|loss| TransportFault::new("control_write", role, loss.to_string()))?;
     if let Some(id) = id {
-        pending.insert(id, tokio::time::Instant::now() + limits::values().response);
+        pending.insert(id, TickInstant::now() + limits::values().response);
     }
     Ok(())
 }
@@ -2819,7 +2822,7 @@ fn handle_frame(
             let Some(deadline) = deadline else {
                 return Ok(());
             };
-            if deadline <= tokio::time::Instant::now() {
+            if deadline <= TickInstant::now() {
                 return Err(TransportFault::new(
                     "control_response",
                     role,
@@ -3193,7 +3196,7 @@ struct BootstrapJob {
     match_key: frame::MatchKey,
     member: MemberId,
     bytes: Vec<u8>,
-    deadline: tokio::time::Instant,
+    deadline: TickInstant,
 }
 
 fn enqueue_bootstrap_job(
@@ -3220,7 +3223,7 @@ fn enqueue_bootstrap_job(
             match_key,
             member,
             bytes,
-            deadline: tokio::time::Instant::now() + limits::values().queue_age,
+            deadline: TickInstant::now() + limits::values().queue_age,
         }),
         "bootstrap_job",
     )
@@ -3318,7 +3321,7 @@ async fn bootstrap_egress(
                 let Some(BootstrapJob { match_key, member, bytes, deadline, _bytes }) = job else {
                     return Ok(());
                 };
-                if deadline <= tokio::time::Instant::now() { return Err(TransportFault::new("bootstrap_job", role, "bootstrap queue deadline")); }
+                if deadline <= TickInstant::now() { return Err(TransportFault::new("bootstrap_job", role, "bootstrap queue deadline")); }
                 send_bootstrap_stream(&connection, member, &bytes, &cancel, role).await?;
                 if let Ok(Some(BootstrapMessage::Offer {
                     bootstrap_id,
@@ -3501,15 +3504,15 @@ async fn gameplay_egress(
     let mut fragmenter = relay_fragmenter();
     // Quinn reserves bookkeeping space even for an empty datagram buffer.
     let empty_buffer_space = connection.datagram_send_buffer_space();
-    let mut pending: VecDeque<(MemberId, Vec<u8>, tokio::time::Instant)> = VecDeque::new();
+    let mut pending: VecDeque<(MemberId, Vec<u8>, TickInstant)> = VecDeque::new();
     let mut tick = tokio::time::interval(QUEUE_POLL);
-    let mut sampled = tokio::time::Instant::now();
+    let mut sampled = TickInstant::now();
     loop {
         tokio::select! {
             _ = cancel.cancelled() => return Ok(()),
             _ = tick.tick() => {
                 if sampled.elapsed() >= Duration::from_millis(100) {
-                    sampled = tokio::time::Instant::now();
+                    sampled = TickInstant::now();
                     let stats = connection.stats();
                     perf::net_path(
                         role,
@@ -3530,11 +3533,11 @@ async fn gameplay_egress(
                         if pending.len() >= master_protocol::MAX_SESSION_MEMBERS as usize {
                             return Err(TransportFault::new("send_datagram", role, "pending peer budget exhausted"));
                         }
-                        pending.push_back((member, packet, tokio::time::Instant::now() + limits::values().queue_age));
+                        pending.push_back((member, packet, TickInstant::now() + limits::values().queue_age));
                     }
                 }
                 while let Some((member, packet, deadline)) = pending.front() {
-                    if *deadline <= tokio::time::Instant::now() {
+                    if *deadline <= TickInstant::now() {
                         return Err(TransportFault::new("send_datagram", role, "gameplay queue deadline"));
                     }
                     let fragments = match fragmenter.split(packet) {
@@ -3765,7 +3768,7 @@ async fn connect(
 ) -> Result<(quinn::Endpoint, quinn::Connection)> {
     limits::configured()?;
     let started = Instant::now();
-    let deadline = tokio::time::Instant::now() + limits::values().connect;
+    let deadline = TickInstant::now() + limits::values().connect;
     let address = tokio::time::timeout_at(
         deadline,
         dns_timeout(cancel, tokio::net::lookup_host(target.address.as_str())),
@@ -3783,11 +3786,11 @@ async fn connect(
     .parse()?;
     let mut attempts = tokio::task::JoinSet::new();
     let mut in_flight = VecDeque::new();
-    let mut next_attempt = tokio::time::Instant::now();
+    let mut next_attempt = TickInstant::now();
     let mut retry = CONNECT_RETRY_FIRST;
     let mut started_attempts = 0_u32;
     loop {
-        if tokio::time::Instant::now() >= next_attempt {
+        if TickInstant::now() >= next_attempt {
             if in_flight.len() == CONNECT_RACE {
                 let oldest: tokio::task::AbortHandle = in_flight.pop_front().expect("race is full");
                 oldest.abort();

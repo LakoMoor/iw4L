@@ -1,6 +1,6 @@
 import { enableTouch } from "./touch.js";
 import { Host, Guest, describePath } from "./rtc.js";
-import init, { mount_shard, run, run_map } from "./pkg/iw4l_web.js";
+import init, { mount_shard, run, run_map, net_open, net_close, net_message, net_tick } from "./pkg/iw4l_web.js";
 
 const GAME_DIR = "Call of Duty Modern Warfare 2";
 const $ = (id) => document.getElementById(id);
@@ -60,7 +60,7 @@ async function start() {
   $("start").disabled = true;
   $("bar").hidden = false;
   log("loading engine…");
-  await init();
+  await engine;
   const parts = await readToc(source);
   const wanted = ["common", $("map").value];
   let done = 0;
@@ -74,6 +74,7 @@ async function start() {
     $("bar").value = ++done / wanted.length;
   }
   document.body.classList.add("running");
+  $("mp-slot").appendChild($("mp"));
   $("iw4l-canvas").focus();
   enableTouch({ force: params.has("touch") });
   if (params.has("launch")) run_map(params.get("launch")); else run();
@@ -90,8 +91,10 @@ if (packUrl) {
   }).catch((e) => log("error: " + e, "err"));
 }
 
-// ---- Multiplayer lobby: connect, then prove both channels work ----
+// ---- Multiplayer: swap two codes, then the engine's lobby takes over ----
 let room = null;
+let engineReady = false;
+const engine = init().then(() => { engineReady = true; });
 const peers = $("peers");
 const peerRow = new Map();
 
@@ -102,20 +105,36 @@ function showPeer(id, text, ok) {
   li.className = ok ? "ok" : "";
 }
 
+// The engine module loads once; links can open before the game starts.
+const LANES = ["control", "data", "bulk"];
+
 function wire(r) {
   r.onOpen = async (id) => {
+    await engine;
+    net_open(id);
     showPeer(id, "Player " + id + ": connected, checking route…", true);
-    r.send(id, "control", new TextEncoder().encode("ping"));
     const path = await r.path(id);
     showPeer(id, "Player " + id + ": " + describePath(path), true);
   };
-  r.onMessage = (id, lane, bytes) => {
-    const text = new TextDecoder().decode(bytes);
-    if (text === "ping") r.send(id, lane, new TextEncoder().encode("pong"));
-    else log("player " + id + " " + lane + ": " + text);
+  r.onMessage = (id, lane, bytes) => net_message(id, LANES.indexOf(lane), bytes);
+  r.onClose = (id, why) => {
+    net_close(id);
+    showPeer(id, "Player " + id + ": disconnected (" + why + ")", false);
   };
-  r.onClose = (id, why) => showPeer(id, "Player " + id + ": disconnected (" + why + ")", false);
 }
+
+// Hand the engine what arrived, send what it queued. A short timer is enough:
+// the relay is stepped here, not on a thread.
+setInterval(() => {
+  if (!engineReady) return;
+  const packed = net_tick();
+  const view = new DataView(packed.buffer, packed.byteOffset, packed.byteLength);
+  for (let at = 0; at < packed.length;) {
+    const member = view.getUint32(at, true), lane = packed[at + 4], len = view.getUint32(at + 5, true);
+    room?.send(member, LANES[lane], packed.subarray(at + 9, at + 9 + len));
+    at += 9 + len;
+  }
+}, 5);
 
 let pending = null;
 async function newInvite() {
@@ -147,7 +166,7 @@ $("make-answer").addEventListener("click", () =>
 if (params.has("bare")) {
   (async () => {
     log("bare start: webgpu=" + !!navigator.gpu + " isolated=" + self.crossOriginIsolated);
-    await init();
+    await engine;
     document.body.classList.add("running");
     run();
   })().catch((e) => log("error: " + e, "err"));
@@ -160,9 +179,17 @@ if (params.has("rtctest")) {
     const t0 = performance.now();
     const seen = new Set();
     const enc = new TextEncoder(), dec = new TextDecoder();
-    host.onMessage = (id, lane, b) => { seen.add("host<-" + lane + ":" + dec.decode(b)); log("host got " + lane + " " + dec.decode(b)); };
+    host.onMessage = (id, lane, b) => { seen.add("host<-" + lane + ":" + dec.decode(b)); if (lane === "bulk") seen.add(dec.decode(b) === "sum:" + sum(blob) ? "bulk-ok" : "bulk-bad"); log("host got " + lane + " " + dec.decode(b)); };
     guest.onMessage = (id, lane, b) => { log("guest got " + lane + " " + dec.decode(b)); guest.send(0, lane, enc.encode("pong")); };
+    // A 300 KB blob across the reliable lane exercises the chunking.
+    const blob = new Uint8Array(300000).map((_, i) => (i * 31) & 255);
+    const sum = (b) => b.reduce((n, x) => (n * 33 + x) >>> 0, 5381);
+    guest.onMessage = (id, lane, b) => {
+      if (b.length === blob.length) { guest.send(0, "bulk", enc.encode("sum:" + sum(b))); return; }
+      log("guest got " + lane + " " + dec.decode(b)); guest.send(0, lane, enc.encode("pong"));
+    };
     host.onOpen = async (id) => {
+      host.send(id, "bulk", blob);
       log("RTCTEST open after " + Math.round(performance.now() - t0) + " ms");
       host.send(id, "control", enc.encode("ping"));
       host.send(id, "data", enc.encode("ping"));
@@ -174,6 +201,11 @@ if (params.has("rtctest")) {
     log("RTCTEST answer " + answer.length + " chars");
     await host.accept(member, answer);
     await new Promise((r) => setTimeout(r, 6000));
-    log("RTCTEST result " + (seen.has("host<-control:pong") && seen.has("host<-data:pong") ? "PASS" : "FAIL " + [...seen]));
+    log("RTCTEST result " + (seen.has("host<-control:pong") && seen.has("host<-data:pong") && seen.has("bulk-ok") ? "PASS" : "FAIL " + [...seen]));
   })().catch((e) => log("RTCTEST error: " + e, "err"));
 }
+
+$("mp-toggle").addEventListener("click", () => {
+  $("mp-slot").classList.toggle("open");
+  $("mp").open = true;
+});

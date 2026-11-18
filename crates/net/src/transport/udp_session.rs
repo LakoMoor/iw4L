@@ -69,6 +69,14 @@ impl RelayMailbox {
 
     // The control reader is the sole producer. Keep the capacity wait in its
     // select loop so cancellation and local commands still run under pressure.
+    /// Whether the control reader may push another frame right now.
+    pub(crate) fn control_inbound_has_capacity(&self) -> bool {
+        self.control_inbound
+            .lock()
+            .expect("relay mailbox poisoned")
+            .len()
+            < self.cap
+    }
     pub(crate) async fn wait_control_inbound_capacity(&self) {
         loop {
             let drained = self.control_inbound_drained.notified();

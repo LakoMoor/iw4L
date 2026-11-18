@@ -4291,6 +4291,7 @@ dependencies = [
  "bootstrap",
  "console_error_panic_hook",
  "diag",
+ "net",
  "sim",
  "vfs",
  "wasm-bindgen",

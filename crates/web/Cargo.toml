@@ -18,6 +18,7 @@ asset_transport = { path = "../asset_transport" }
 diag = { path = "../diag" }
 vfs = { path = "../vfs" }
 sim = { path = "../sim" }
+net = { path = "../net" }
 
 [lints]
 workspace = true

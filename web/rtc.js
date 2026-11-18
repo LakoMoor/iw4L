@@ -4,8 +4,9 @@
 // answer code back. No server is involved: the codes carry the WebRTC session
 // descriptions (with their ICE candidates) and travel over any chat.
 //
-// Every peer has two data channels:
-//   control  reliable and ordered     (lobby, loading, state that must arrive)
+// Every peer has two data channels, carrying three lanes:
+//   control  reliable and ordered     (lobby, requests, state that must arrive)
+//   bulk     same channel, big blobs  (map bootstrap), split into chunks
 //   data     unordered, no resends    (snapshots and inputs; newest wins)
 
 // Order of attempts: direct UDP first, then relays on 443 for networks that
@@ -20,6 +21,14 @@ export const DEFAULT_ICE = {
 };
 
 const GATHER_TIMEOUT_MS = 6000;
+
+// Reliable messages are cut into chunks so a big blob never trips the browser's
+// message size limit. Header: lane (1), message id (4), index (2), count (2).
+const CHUNK = 15000;
+const HEADER = 9;
+const LANE_ID = { control: 0, bulk: 2 };
+const LANE_NAME = { 0: "control", 2: "bulk" };
+const DATA_BACKLOG = 256 * 1024;
 
 async function pipe(bytes, stream) {
   const out = new Response(new Blob([bytes]).stream().pipeThrough(stream));
@@ -85,9 +94,11 @@ class Link {
     if (channel.label === "control") this.control = channel;
     else if (channel.label === "data") this.data = channel;
     else return;
-    channel.addEventListener("message", (e) =>
-      this.hooks.onMessage(this.id, channel.label, new Uint8Array(e.data)),
-    );
+    channel.addEventListener("message", (e) => {
+      const bytes = new Uint8Array(e.data);
+      if (channel.label === "data") this.hooks.onMessage(this.id, "data", bytes);
+      else this.#chunk(bytes);
+    });
     channel.addEventListener("open", () => {
       if (!this.open && this.control?.readyState === "open" && this.data?.readyState === "open") {
         this.open = true;
@@ -103,9 +114,46 @@ class Link {
     this.hooks.onClose(this.id, reason);
   }
 
+  #chunk(bytes) {
+    if (bytes.length < HEADER) return;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const lane = LANE_NAME[bytes[0]];
+    const id = view.getUint32(1, true), index = view.getUint16(5, true), count = view.getUint16(7, true);
+    if (!lane) return;
+    const body = bytes.subarray(HEADER);
+    if (count === 1) return this.hooks.onMessage(this.id, lane, body);
+    this.partial ??= new Map();
+    const key = lane + ":" + id;
+    let entry = this.partial.get(key);
+    if (!entry) { entry = { parts: new Array(count), have: 0 }; this.partial.set(key, entry); }
+    if (!entry.parts[index]) { entry.parts[index] = body; entry.have++; }
+    if (entry.have < count) return;
+    this.partial.delete(key);
+    const whole = new Uint8Array(entry.parts.reduce((n, p) => n + p.length, 0));
+    let at = 0;
+    for (const part of entry.parts) { whole.set(part, at); at += part.length; }
+    this.hooks.onMessage(this.id, lane, whole);
+  }
+
   send(lane, bytes) {
-    const ch = lane === "control" ? this.control : this.data;
-    if (ch?.readyState === "open") ch.send(bytes);
+    if (lane === "data") {
+      // Newest state wins: when the link is congested, drop instead of queueing.
+      if (this.data?.readyState === "open" && this.data.bufferedAmount < DATA_BACKLOG) this.data.send(bytes);
+      return;
+    }
+    const ch = this.control;
+    if (ch?.readyState !== "open") return;
+    const id = (this.nextMessage = ((this.nextMessage ?? 0) + 1) >>> 0);
+    const count = Math.max(1, Math.ceil(bytes.length / CHUNK));
+    for (let index = 0; index < count; index++) {
+      const body = bytes.subarray(index * CHUNK, (index + 1) * CHUNK);
+      const framed = new Uint8Array(HEADER + body.length);
+      const view = new DataView(framed.buffer);
+      framed[0] = LANE_ID[lane];
+      view.setUint32(1, id, true); view.setUint16(5, index, true); view.setUint16(7, count, true);
+      framed.set(body, HEADER);
+      ch.send(framed);
+    }
   }
 
   close() {

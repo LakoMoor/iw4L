@@ -39,10 +39,16 @@ textarea{width:100%;background:#10130b;color:var(--text);border:1px solid var(--
 #peers{list-style:none;padding:0;margin:.8rem 0 0}
 #peers li{padding:.4rem 0;border-bottom:1px solid rgba(89,96,74,.5)}
 #peers .ok{color:var(--ok)}
+#mp-toggle{position:fixed;top:.5rem;right:.5rem;z-index:30;display:none;font:400 .85rem var(--display);padding:.4rem .7rem;border:1px solid var(--amber);background:rgba(8,10,6,.75);color:var(--amber);cursor:pointer}
+body.running #mp-toggle{display:block}
+#mp-slot{position:fixed;top:2.6rem;right:.5rem;z-index:30;width:min(28rem,calc(100% - 1rem));max-height:80vh;overflow:auto;background:var(--panel);border:1px solid var(--edge);padding:0 1rem;display:none}
+#mp-slot.open{display:block}
 </style>
 </head>
 <body>
 <canvas id="iw4l-canvas" tabindex="0"></canvas>
+<button id="mp-toggle" type="button">Multiplayer</button>
+<div id="mp-slot"></div>
 <main id="gate"><div class="card">
   <h1>IW4L — Play</h1>
   <p>Load the game pack and start. The pack is built from your own copy of MW2 and stays in this browser tab; nothing is uploaded.</p>
