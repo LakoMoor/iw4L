@@ -141,11 +141,16 @@ pub fn init_log(artifacts_root: &Path) -> PathBuf {
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .ok();
+    // A browser keeps files in memory: a log there only grows until the tab dies.
+    let file = if cfg!(target_arch = "wasm32") {
+        None
+    } else {
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .ok()
+    };
 
     let (traces, traces_path) = match std::env::var_os("IW4L_TRACES_DIR") {
         Some(dir) => {

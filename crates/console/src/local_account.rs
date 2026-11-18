@@ -40,11 +40,33 @@ pub(crate) fn load(
     ) {
         return;
     }
-    // A browser tab has no files to keep an account in: it plays under a fresh
-    // key for as long as the tab lives.
+    // The browser keeps the seed in its saved files (IndexedDB), so the same
+    // browser plays under the same account from one visit to the next.
     #[cfg(target_arch = "wasm32")]
     {
-        match net::AccountKey::generate() {
+        let seed_path = identity.artifacts.join("profile").join("account-seed.txt");
+        let saved = vfs::read_to_string(&seed_path)
+            .ok()
+            .and_then(|text| {
+                let text = text.trim();
+                let mut seed = [0u8; 32];
+                if text.len() != 64 {
+                    return None;
+                }
+                for (i, byte) in seed.iter_mut().enumerate() {
+                    *byte = u8::from_str_radix(text.get(i * 2..i * 2 + 2)?, 16).ok()?;
+                }
+                net::AccountKey::from_seed(seed).ok()
+            });
+        let made = match saved {
+            Some(key) => Ok(key),
+            None => net::AccountKey::generate().inspect(|key| {
+                let hex: String = key.export_seed().iter().map(|b| format!("{b:02x}")).collect();
+                let _ = vfs::create_dir_all(seed_path.parent().unwrap_or(&identity.artifacts));
+                let _ = vfs::write(&seed_path, hex);
+            }),
+        };
+        match made {
             Ok(key) => {
                 let account = LocalAccount {
                     id: key.account(),
