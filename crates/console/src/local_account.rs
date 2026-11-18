@@ -1,10 +1,10 @@
-use web_time::Instant;
 use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     path::{Path, PathBuf},
     time::Duration,
 };
+use web_time::Instant;
 
 use bevy::prelude::*;
 use session::LocalAccount;
@@ -40,24 +40,46 @@ pub(crate) fn load(
     ) {
         return;
     }
-    let path = std::env::var_os("IW4L_ACCOUNT_PATH")
-        .map(PathBuf::from)
-        .or_else(|| {
-            crate::user_settings::settings_path(&identity.artifacts)
-                .map(|path| path.with_file_name("account.dat"))
-        });
-    let Some(path) = path else {
-        warn!("no HOME or XDG_CONFIG_HOME; no durable local account available");
-        return;
-    };
-    match load_or_create(&path) {
-        Ok(account) => {
-            persistence.path = Some(path);
-            persistence.saved = account.snapshot.clone();
-            commands.insert_resource(net::AccountSaveReceipt(account.snapshot.clone()));
-            commands.insert_resource(account);
+    // A browser tab has no files to keep an account in: it plays under a fresh
+    // key for as long as the tab lives.
+    #[cfg(target_arch = "wasm32")]
+    {
+        match net::AccountKey::generate() {
+            Ok(key) => {
+                let account = LocalAccount {
+                    id: key.account(),
+                    key,
+                    snapshot: None,
+                };
+                commands.insert_resource(net::AccountSaveReceipt(None));
+                commands.insert_resource(account);
+            }
+            Err(_) => warn!("account key generation failed"),
         }
-        Err(error) => warn!("could not load local account {}: {error}", path.display()),
+        let _ = (&identity, &mut persistence);
+        return;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let path = std::env::var_os("IW4L_ACCOUNT_PATH")
+            .map(PathBuf::from)
+            .or_else(|| {
+                crate::user_settings::settings_path(&identity.artifacts)
+                    .map(|path| path.with_file_name("account.dat"))
+            });
+        let Some(path) = path else {
+            warn!("no HOME or XDG_CONFIG_HOME; no durable local account available");
+            return;
+        };
+        match load_or_create(&path) {
+            Ok(account) => {
+                persistence.path = Some(path);
+                persistence.saved = account.snapshot.clone();
+                commands.insert_resource(net::AccountSaveReceipt(account.snapshot.clone()));
+                commands.insert_resource(account);
+            }
+            Err(error) => warn!("could not load local account {}: {error}", path.display()),
+        }
     }
 }
 
