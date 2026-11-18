@@ -13,12 +13,12 @@ use alloc::{
     vec::Vec,
 };
 
-static SHADOWS: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(true);
+static SHADOWS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(1);
 
 /// Debug switch for A/B comparisons: with shadows off every comparison reads "lit".
 /// Takes effect for programs flattened after the call.
-pub fn set_shadows(on: bool) {
-    SHADOWS.store(on, core::sync::atomic::Ordering::Relaxed);
+pub fn set_shadows(mode: u8) {
+    SHADOWS.store(mode, core::sync::atomic::Ordering::Relaxed);
 }
 
 const TABLES: [&str; 4] = [
@@ -190,16 +190,18 @@ pub fn flatten_texture_tables(wgsl: &str) -> String {
                 binding + 1
             ));
         }
-        let shadows = SHADOWS.load(core::sync::atomic::Ordering::Relaxed);
-        for register in shadow_registers.iter().filter(|_| !shadows) {
+        let mode = SHADOWS.load(core::sync::atomic::Ordering::Relaxed);
+        for register in shadow_registers.iter().filter(|_| mode != 1) {
+            // 0: everything lit; 2: everything in shadow (A/B debugging).
+            let lit = if mode == 2 { "0.0" } else { "1.0" };
             declarations.push_str(&format!(
                 "fn sm3_shadow_compare_s{register}(uv: vec2<f32>, z: f32) -> f32 {{
-    return 1.0;
+    return {lit};
 }}
 "
             ));
         }
-        for register in shadow_registers.iter().filter(|_| shadows) {
+        for register in shadow_registers.iter().filter(|_| mode == 1) {
             declarations.push_str(&format!(
                 "fn sm3_shadow_compare_s{register}(uv: vec2<f32>, z: f32) -> f32 {{
     let size = vec2<f32>(textureDimensions(sm3_tex_s{register}));

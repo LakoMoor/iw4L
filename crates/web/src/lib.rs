@@ -94,10 +94,10 @@ mod entry {
         let _ = vfs::write(path, bytes);
     }
 
-    /// Debug: draw without sun/spot shadows (call before the engine starts).
+    /// Debug: 0 = no shadows, 1 = shadows, 2 = everything in shadow (call before the engine starts).
     #[wasm_bindgen]
-    pub fn set_shadows(on: bool) {
-        d3d9_sm3::set_shadows(on);
+    pub fn set_shadows(mode: u8) {
+        d3d9_sm3::set_shadows(mode);
     }
 
     /// Step the audio control loop and prepare queued clips (called from the page timer).

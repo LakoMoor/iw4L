@@ -79,7 +79,8 @@ async function start() {
   $("mp-slot").appendChild($("mp"));
   $("iw4l-canvas").focus();
   enableTouch({ force: params.has("touch") });
-  if (params.has("noshadow")) set_shadows(false);
+  if (params.has("noshadow")) set_shadows(0);
+  if (params.has("shadowdark")) set_shadows(2);
   if (params.has("launch")) run_map(params.get("launch")); else run();
 }
 
