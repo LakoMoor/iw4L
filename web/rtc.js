@@ -83,7 +83,9 @@ class Link {
     this.control = null;
     this.data = null;
     this.open = false;
+    pc.addEventListener("iceconnectionstatechange", () => console.log("rtc link " + id + " ice " + pc.iceConnectionState));
     pc.addEventListener("connectionstatechange", () => {
+      console.log("rtc link " + id + " " + pc.connectionState);
       const s = pc.connectionState;
       if (s === "failed" || s === "disconnected" || s === "closed") this.#closed(s);
     });
