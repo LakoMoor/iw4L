@@ -2664,6 +2664,7 @@ dependencies = [
  "session",
  "sim",
  "ui",
+ "vfs",
  "web-time",
 ]
 
@@ -7711,6 +7712,7 @@ dependencies = [
  "session",
  "sim",
  "updater",
+ "vfs",
  "web-time",
 ]
 

@@ -398,6 +398,29 @@ pub fn remove_dir_all(path: impl AsRef<Path>) -> io::Result<()> {
     remove_file(path)
 }
 
+/// Files the engine wrote (not mounted shards) under `prefix`, for the page to keep.
+pub fn export_written(prefix: impl AsRef<Path>) -> Vec<(String, Vec<u8>)> {
+    fn walk(dir: &Dir, here: &mut Vec<String>, out: &mut Vec<(String, Vec<u8>)>) {
+        for (name, node) in dir.0.values() {
+            here.push(name.clone());
+            match node {
+                Node::Dir(d) => walk(d, here, out),
+                Node::File(Data::Mem(bytes)) => out.push((here.join("/"), bytes.as_ref().clone())),
+                Node::File(_) => {}
+            }
+            here.pop();
+        }
+    }
+    let comps = split_slashes(prefix.as_ref());
+    let tree = lock();
+    let mut out = Vec::new();
+    if let Some(Node::Dir(dir)) = tree.get(&comps) {
+        let mut here = comps.clone();
+        walk(dir, &mut here, &mut out);
+    }
+    out
+}
+
 pub fn rename(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
     let mut tree = lock();
     let node = tree

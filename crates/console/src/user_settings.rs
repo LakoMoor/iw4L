@@ -1,4 +1,6 @@
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
+
+use vfs as fs;
 
 use bevy::{
     input::{
@@ -279,7 +281,7 @@ pub(crate) fn settings_path(artifacts: &std::path::Path) -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("IW4L_SETTINGS_PATH") {
         return Some(PathBuf::from(path));
     }
-    if cfg!(windows) {
+    if cfg!(windows) || cfg!(target_arch = "wasm32") {
         return Some(artifacts.join("settings.cfg"));
     }
     std::env::var_os("XDG_CONFIG_HOME")

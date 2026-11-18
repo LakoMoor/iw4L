@@ -1,4 +1,6 @@
-use std::{fs, path::PathBuf};
+use std::path::PathBuf;
+
+use vfs as fs;
 
 use bevy::prelude::*;
 use sim::LocalPlayerProfile;

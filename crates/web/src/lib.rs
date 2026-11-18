@@ -64,6 +64,34 @@ mod entry {
         packed
     }
 
+    /// Settings and profile files the engine wrote, packed as repeated
+    /// `[path_len u32 LE][path][len u32 LE][bytes]` for the page to keep.
+    #[wasm_bindgen]
+    pub fn persist_dump() -> Vec<u8> {
+        let mut packed = Vec::new();
+        for (path, bytes) in vfs::export_written("/iw4l-artifacts") {
+            let lower = path.to_lowercase();
+            if !(lower.ends_with(".cfg") || lower.ends_with(".txt")) || lower.contains("log") {
+                continue;
+            }
+            packed.extend_from_slice(&(path.len() as u32).to_le_bytes());
+            packed.extend_from_slice(path.as_bytes());
+            packed.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+            packed.extend_from_slice(&bytes);
+        }
+        packed
+    }
+
+    /// Put a kept file back before the engine starts.
+    #[wasm_bindgen]
+    pub fn persist_load(path: &str, bytes: Vec<u8>) {
+        let path = std::path::Path::new("/").join(path);
+        if let Some(parent) = path.parent() {
+            let _ = vfs::create_dir_all(parent);
+        }
+        let _ = vfs::write(path, bytes);
+    }
+
     /// Step the audio control loop and prepare queued clips (called from the page timer).
     #[wasm_bindgen]
     pub fn audio_tick() {

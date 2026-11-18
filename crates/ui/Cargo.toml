@@ -6,6 +6,7 @@ license.workspace = true
 description = "Client UI state, settings and loading overlays."
 
 [dependencies]
+vfs = { path = "../vfs" }
 web-time = "1"
 diag.workspace = true
 bevy.workspace = true

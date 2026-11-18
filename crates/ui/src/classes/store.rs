@@ -316,7 +316,7 @@ pub(crate) fn load_class_store(
             .map_or(0, |elapsed| elapsed.as_nanos() as u64);
         SessionClassStore::from_showcase(seed, registry)
     };
-    match std::fs::read_to_string(&path) {
+    match vfs::read_to_string(&path) {
         Ok(text) => match decode_slots(&text) {
             Some(slots) => {
                 diag::info!(Ui, "classes: {} read from {}", slots.len(), path.display());
@@ -367,18 +367,18 @@ fn write_class_file(path: &std::path::Path, contents: &str) -> std::io::Result<(
     use std::io::Write;
 
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+        vfs::create_dir_all(parent)?;
     }
     let pending = path.with_extension(format!("{}.tmp", (if cfg!(target_arch = "wasm32") { 0_u32 } else { std::process::id() })));
     let result = (|| {
-        let mut output = std::fs::File::create(&pending)?;
+        let mut output = vfs::File::create(&pending)?;
         output.write_all(contents.as_bytes())?;
         output.sync_all()?;
         drop(output);
-        std::fs::rename(&pending, path)
+        vfs::rename(&pending, path)
     })();
     if result.is_err() {
-        let _ = std::fs::remove_file(&pending);
+        let _ = vfs::remove_file(&pending);
     }
     result
 }

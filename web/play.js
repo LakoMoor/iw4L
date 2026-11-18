@@ -1,6 +1,6 @@
 import { enableTouch, setTouchMode } from "./touch.js";
 import { Host, Guest, describePath } from "./rtc.js";
-import init, { mount_shard, run, run_map, net_open, net_close, net_message, net_tick, net_host, net_join_first, net_start, audio_tick, audio_pull } from "./pkg/iw4l_web.js";
+import init, { mount_shard, run, run_map, net_open, net_close, net_message, net_tick, net_host, net_join_first, net_start, audio_tick, audio_pull, persist_dump, persist_load } from "./pkg/iw4l_web.js";
 
 const GAME_DIR = "Call of Duty Modern Warfare 2";
 const $ = (id) => document.getElementById(id);
@@ -73,6 +73,7 @@ async function start() {
     log(`${name}: ${mount_shard(GAME_DIR, bytes)} files`);
     $("bar").value = ++done / wanted.length;
   }
+  await restoreSaved();
   document.body.classList.add("running");
   $("mp-slot").appendChild($("mp"));
   $("iw4l-canvas").focus();
@@ -255,3 +256,52 @@ export function startAudio() {
     else if (line.includes("menu open: ")) setTouchMode("menu");
   };
 }
+
+// Settings, class loadouts and the player profile live in the engine's memory
+// filesystem; keep them in IndexedDB so they survive a reload.
+const DB_NAME = "iw4l", STORE = "files";
+function db() {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open(DB_NAME, 1);
+    open.onupgradeneeded = () => open.result.createObjectStore(STORE);
+    open.onsuccess = () => resolve(open.result);
+    open.onerror = () => reject(open.error);
+  });
+}
+async function restoreSaved() {
+  try {
+    const d = await db();
+    const all = await new Promise((resolve, reject) => {
+      const store = d.transaction(STORE).objectStore(STORE);
+      const keys = store.getAllKeys(), vals = store.getAll();
+      vals.onsuccess = () => resolve(keys.result.map((k, i) => [k, vals.result[i]]));
+      vals.onerror = () => reject(vals.error);
+    });
+    for (const [path, bytes] of all) persist_load(path, bytes);
+    if (all.length) log("restored " + all.length + " saved setting file(s)");
+  } catch (e) { console.warn("saved settings unavailable", e); }
+}
+let savedDigest = "";
+async function saveChanged() {
+  if (!engineReady) return;
+  const packed = persist_dump();
+  const view = new DataView(packed.buffer, packed.byteOffset, packed.byteLength);
+  const files = [];
+  const text = new TextDecoder();
+  for (let at = 0; at < packed.length;) {
+    const plen = view.getUint32(at, true); at += 4;
+    const path = text.decode(packed.subarray(at, at + plen)); at += plen;
+    const len = view.getUint32(at, true); at += 4;
+    files.push([path, packed.slice(at, at + len)]); at += len;
+  }
+  const digest = files.map(([p, b]) => p + ":" + b.length + ":" + b.reduce((h, x) => (h * 31 + x) | 0, 7)).join("|");
+  if (digest === savedDigest) return;
+  savedDigest = digest;
+  try {
+    const d = await db();
+    const tx = d.transaction(STORE, "readwrite");
+    for (const [path, bytes] of files) tx.objectStore(STORE).put(bytes, path);
+  } catch (e) { console.warn("could not save settings", e); }
+}
+setInterval(() => saveChanged().catch(() => {}), 5000);
+window.__saved = async () => { const d = await db(); return await new Promise((r) => { const q = d.transaction(STORE).objectStore(STORE).getAllKeys(); q.onsuccess = () => r(q.result); }); };
