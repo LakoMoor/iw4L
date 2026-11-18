@@ -50,11 +50,112 @@ async function readToc(src) {
   return JSON.parse(new TextDecoder().decode(json)).parts;
 }
 
+// ---- Game file: pick, drop or resume, then list the maps it holds ----
+const MAP_NAMES = { mp_rust: "Rust", mp_boneyard: "Scrapyard", mp_terminal: "Terminal", mp_favela: "Favela" };
+const picked = (text, cls) => { $("picked").textContent = text; $("picked").className = cls || ""; };
+
+async function useSource(src, label) {
+  $("start").disabled = true;
+  source = null;
+  let parts;
+  try {
+    parts = await readToc(src);
+  } catch (e) {
+    picked(label + ": " + (e.message.startsWith("not an IW4L") ? "this is not an IW4L game file (.iw4pk)" : e.message), "bad");
+    return false;
+  }
+  const maps = parts.map((p) => p.name).filter((n) => n.startsWith("mp_"));
+  if (!parts.some((p) => p.name === "common") || !maps.length) {
+    picked(label + ": the file has no playable map", "bad");
+    return false;
+  }
+  const want = params.get("map") || localStorage.getItem("iw4l.map") || $("map").value;
+  $("map").replaceChildren(...maps.map((m) => new Option(MAP_NAMES[m] || m, m)));
+  $("map").value = maps.includes(want) ? want : maps[0];
+  source = src;
+  picked(label + " — " + maps.length + (maps.length === 1 ? " map" : " maps") + ", " + (src.size >= 1e9 ? (src.size / 1e9).toFixed(2) + " GB" : Math.round(src.size / 1e6) + " MB"), "ok");
+  $("resume").hidden = true;
+  $("start").disabled = false;
+  return true;
+}
+$("map").addEventListener("change", () => localStorage.setItem("iw4l.map", $("map").value));
+
+// The browser can keep a handle to the file (not a copy), so the next visit is one click.
+const HANDLE_DB = "iw4l-gamefile";
+function handleStore(mode, fn) {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open(HANDLE_DB, 1);
+    open.onupgradeneeded = () => open.result.createObjectStore("h");
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const req = fn(open.result.transaction("h", mode).objectStore("h"));
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    };
+  });
+}
+const rememberHandle = (handle) => handleStore("readwrite", (st) => st.put(handle, "last")).catch(() => {});
+
+async function openHandle(handle, remember = true) {
+  const file = await handle.getFile();
+  const ok = await useSource(fileSource(file), file.name);
+  if (ok && remember) rememberHandle(handle);
+  return ok;
+}
+
+async function tryResume() {
+  if (!window.showOpenFilePicker || packUrl) return;
+  const handle = await handleStore("readonly", (st) => st.get("last")).catch(() => null);
+  if (!handle) return;
+  const label = $("resume");
+  label.textContent = "Continue with " + handle.name;
+  try {
+    if ((await handle.queryPermission({ mode: "read" })) === "granted") {
+      if (await openHandle(handle, false)) return;
+    }
+  } catch { /* file moved or deleted */ }
+  label.hidden = false;
+  label.onclick = async () => {
+    try {
+      if ((await handle.requestPermission({ mode: "read" })) !== "granted") return;
+      if (!(await openHandle(handle, false))) label.hidden = true;
+    } catch {
+      picked(handle.name + ": cannot be opened any more; choose it again", "bad");
+      label.hidden = true;
+    }
+  };
+}
+
 $("packs").addEventListener("change", (e) => {
   const file = e.target.files[0];
-  source = file ? fileSource(file) : null;
-  $("picked").textContent = file ? file.name : "no file selected";
-  $("start").disabled = !file;
+  if (file) useSource(fileSource(file), file.name);
+});
+$("choose").addEventListener("click", async (e) => {
+  if (!window.showOpenFilePicker) return; // plain file input
+  e.preventDefault();
+  try {
+    const [handle] = await window.showOpenFilePicker({ types: [{ description: "IW4L game file", accept: { "application/octet-stream": [".iw4pk"] } }] });
+    await openHandle(handle);
+  } catch (err) {
+    if (err.name !== "AbortError") picked(String(err), "bad");
+  }
+});
+
+let dragDepth = 0;
+addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; document.body.classList.add("dragging"); });
+addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragging"); } });
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", async (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  document.body.classList.remove("dragging");
+  const item = e.dataTransfer.items && e.dataTransfer.items[0];
+  try {
+    const handle = item && item.getAsFileSystemHandle ? await item.getAsFileSystemHandle() : null;
+    if (handle && handle.kind === "file") { await openHandle(handle); return; }
+  } catch { /* fall back to the plain file */ }
+  const file = e.dataTransfer.files[0];
+  if (file) useSource(fileSource(file), file.name);
 });
 
 async function start() {
@@ -86,14 +187,13 @@ async function start() {
 
 $("start").addEventListener("click", () => { startAudio(); start().catch((e) => log("error: " + e, "err")); });
 if (packUrl) {
-  urlSource(packUrl).then((src) => {
-    source = src;
-    $("picked").textContent = "game file from " + packUrl;
-    $("start").disabled = false;
-    if (params.has("map")) $("map").value = params.get("map");
-    if (params.has("autostart")) start().catch((e) => log("error: " + e, "err"));
+  urlSource(packUrl).then(async (src) => {
+    if (await useSource(src, "game file from " + packUrl) && params.has("autostart")) {
+      start().catch((e) => log("error: " + e, "err"));
+    }
   }).catch((e) => log("error: " + e, "err"));
 }
+tryResume();
 
 // ---- Multiplayer: swap two codes, then the engine's lobby takes over ----
 let room = null;

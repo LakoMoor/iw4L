@@ -36,6 +36,10 @@ label{color:var(--dim)}
 details{margin:1rem 0;border-top:1px solid var(--edge);padding-top:.8rem}
 summary{cursor:pointer;font:400 1.1rem var(--display);letter-spacing:.04em}
 textarea{width:100%;background:#10130b;color:var(--text);border:1px solid var(--edge);padding:.5rem;font:.8rem ui-monospace,Consolas,monospace;resize:vertical}
+body.dragging .card{outline:2px dashed var(--amber);outline-offset:6px}
+#drophint{color:var(--dim);font-size:.85rem;margin:.2rem 0 0}
+#picked.ok{color:var(--ok)}
+#picked.bad{color:var(--red)}
 #peers{list-style:none;padding:0;margin:.8rem 0 0}
 #peers li{padding:.4rem 0;border-bottom:1px solid rgba(89,96,74,.5)}
 #peers .ok{color:var(--ok)}
@@ -51,12 +55,14 @@ body.running #mp-toggle{display:block}
 <div id="mp-slot"></div>
 <main id="gate"><div class="card">
   <h1>IW4L — Play</h1>
-  <p>Load the game pack and start. The pack is built from your own copy of MW2 and stays in this browser tab; nothing is uploaded.</p>
+  <p>Drop the game file (<code>.iw4pk</code>) anywhere on this page, pick a map and press Start. The file stays on your computer: nothing is uploaded, and the browser remembers it for next time.</p>
   <div class="row">
-    <label class="btn ghost" for="packs">Choose game file</label>
+    <button class="btn" id="resume" type="button" hidden>Continue</button>
+    <label class="btn ghost" for="packs" id="choose">Choose game file</label>
     <input id="packs" type="file" accept=".iw4pk" hidden>
     <span id="picked">no file selected</span>
   </div>
+  <p id="drophint">One file holds every map. Friends each need their own copy of the file.</p>
   <div class="row">
     <label for="map">Map</label>
     <select id="map"><option value="mp_rust">Rust</option><option value="mp_boneyard">Scrapyard</option><option value="mp_terminal">Terminal</option><option value="mp_favela">Favela</option></select>
