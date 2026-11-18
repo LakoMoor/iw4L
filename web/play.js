@@ -230,7 +230,10 @@ export function startAudio() {
       const frames = e.outputBuffer.length;
       const pcm = audio_pull(frames, audioCtx.sampleRate);
       const l = e.outputBuffer.getChannelData(0), r = e.outputBuffer.getChannelData(1);
-      for (let i = 0; i < frames; i++) { l[i] = pcm[i * 2]; r[i] = pcm[i * 2 + 1]; }
+      let peak = 0;
+      for (let i = 0; i < frames; i++) { l[i] = pcm[i * 2]; r[i] = pcm[i * 2 + 1]; peak = Math.max(peak, Math.abs(l[i]), Math.abs(r[i])); }
+      const stat = (window.__audio ||= { blocks: 0, peak: 0, state: "" });
+      stat.blocks++; stat.peak = Math.max(stat.peak, peak); stat.state = audioCtx.state;
     };
     node.connect(audioCtx.destination);
     const resume = () => audioCtx.state !== 'running' && audioCtx.resume();
