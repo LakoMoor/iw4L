@@ -47,8 +47,22 @@ impl Community {
     }
 }
 
+/// The browser has no master to choose: every player is its own community, and
+/// rooms are reached through the peer links the page opens.
 pub fn selected() -> Option<&'static Community> {
-    None
+    static PEER_TO_PEER: std::sync::OnceLock<Community> = std::sync::OnceLock::new();
+    Some(PEER_TO_PEER.get_or_init(|| Community {
+        schema: 1,
+        name: "Peer to peer".into(),
+        master: Master {
+            address: "webrtc".into(),
+            server_name: "webrtc".into(),
+        },
+        updates: Updates {
+            url: String::new(),
+            ca_pem: String::new(),
+        },
+    }))
 }
 
 pub fn startup() -> Result<Option<Vec<OsString>>> {

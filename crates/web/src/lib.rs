@@ -64,6 +64,30 @@ mod entry {
         packed
     }
 
+    /// Create a room on this tab (the menu's CREATE GAME).
+    #[wasm_bindgen]
+    pub fn net_host(map: &str, mode: &str) {
+        net::web_link::request(net::web_link::PageAction::Host {
+            map: map.to_owned(),
+            mode: mode.to_owned(),
+        });
+    }
+
+    /// Join the first room the lobby list shows.
+    #[wasm_bindgen]
+    pub fn net_join_first() {
+        net::web_link::request(net::web_link::PageAction::JoinFirst);
+    }
+
+    /// Start the match of the room this tab hosts.
+    #[wasm_bindgen]
+    pub fn net_start(map: &str, mode: &str) {
+        net::web_link::request(net::web_link::PageAction::Start {
+            map: map.to_owned(),
+            mode: mode.to_owned(),
+        });
+    }
+
     fn start(mode: bootstrap::LaunchMode) {
         console_error_panic_hook::set_once();
         diag::set_console_sink(|line| web_sys::console::log_1(&line.into()));

@@ -317,6 +317,64 @@ fn forced() -> bool {
     false
 }
 
+/// What the page asks the in-engine lobby to do, without going through the menu.
+#[derive(Clone, Debug)]
+pub enum PageAction {
+    /// Create a room on this tab.
+    Host { map: String, mode: String },
+    /// Join the first room the lobby list shows.
+    JoinFirst,
+    /// Start the match of the room this tab hosts.
+    Start { map: String, mode: String },
+}
+
+thread_local! {
+    static ACTIONS: RefCell<VecDeque<PageAction>> = const { RefCell::new(VecDeque::new()) };
+}
+
+pub fn request(action: PageAction) {
+    ACTIONS.with(|queue| queue.borrow_mut().push_back(action));
+}
+
+/// Feeds page requests into the lobby, one per frame.
+pub(super) fn apply_page_actions(
+    mut pending: ResMut<PendingMasterMenuAction>,
+    browser: Option<Res<MasterBrowser>>,
+) {
+    if pending.0.is_some() {
+        return;
+    }
+    let Some(action) = ACTIONS.with(|queue| queue.borrow_mut().pop_front()) else {
+        return;
+    };
+    pending.0 = match action {
+        PageAction::Host { map, mode } => Some(MasterMenuAction::Host {
+            password: String::new(),
+            map,
+            mode,
+        }),
+        PageAction::Start { map, mode } => Some(MasterMenuAction::StartMatch { map, mode }),
+        PageAction::JoinFirst => {
+            let advert = browser
+                .as_deref()
+                .and_then(|browser| browser.snapshot().adverts.into_iter().next());
+            match advert {
+                Some(advert) => Some(MasterMenuAction::Join {
+                    password: String::new(),
+                    advert_id: advert.id,
+                    map: advert.map,
+                    mode: advert.mode,
+                }),
+                None => {
+                    // Not listed yet: try again on a later frame.
+                    ACTIONS.with(|queue| queue.borrow_mut().push_front(PageAction::JoinFirst));
+                    None
+                }
+            }
+        }
+    };
+}
+
 // --- entry points for the page -------------------------------------------------
 
 /// A link finished its handshake and both channels are open.

@@ -1588,7 +1588,7 @@ pub fn register_master_bridge(app: &mut App) {
     );
     app.add_systems(
             Update,
-            (arm_master_browser, apply_master_menu_action)
+            (web::apply_page_actions, arm_master_browser, apply_master_menu_action)
                 .chain()
                 .in_set(crate::ClientSet::Load),
         )

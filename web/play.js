@@ -1,6 +1,6 @@
 import { enableTouch } from "./touch.js";
 import { Host, Guest, describePath } from "./rtc.js";
-import init, { mount_shard, run, run_map, net_open, net_close, net_message, net_tick } from "./pkg/iw4l_web.js";
+import init, { mount_shard, run, run_map, net_open, net_close, net_message, net_tick, net_host, net_join_first, net_start } from "./pkg/iw4l_web.js";
 
 const GAME_DIR = "Call of Duty Modern Warfare 2";
 const $ = (id) => document.getElementById(id);
@@ -209,3 +209,9 @@ $("mp-toggle").addEventListener("click", () => {
   $("mp-slot").classList.toggle("open");
   $("mp").open = true;
 });
+
+// The same actions as the in-game menu, for when the controls are awkward.
+const matchMap = () => params.get("launch") || $("map").value;
+$("eng-host").addEventListener("click", () => { net_host(matchMap(), "dm"); log("opening a room…"); });
+$("eng-join").addEventListener("click", () => { net_join_first(); log("joining the host's room…"); });
+$("eng-start").addEventListener("click", () => { net_start(matchMap(), "dm"); log("starting the match…"); });
