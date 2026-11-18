@@ -25,10 +25,10 @@ const PATIENCE: u32 = 1;
 impl Default for TransportBudget {
     fn default() -> Self {
         Self {
-            response: Duration::from_secs(20),
+            response: Duration::from_secs(20) * PATIENCE,
             progress: Duration::from_secs(5),
             transfer: Duration::from_secs(90) * PATIENCE,
-            queue_age: Duration::from_secs(20),
+            queue_age: Duration::from_secs(20) * PATIENCE,
             connect: Duration::from_secs(60),
             shutdown: Duration::from_millis(500),
             loading: Duration::from_secs(120) * PATIENCE,
