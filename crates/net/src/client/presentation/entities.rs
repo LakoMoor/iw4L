@@ -138,8 +138,12 @@ pub fn sync_client_entities(
     identities: Query<&CEntity>,
     mut runtimes: Query<&mut CEntityRuntime>,
     mut census: ResMut<CEntityBirthCensus>,
-    installed: Res<frame::InstalledMatch>,
+    installed: Option<Res<frame::InstalledMatch>>,
 ) {
+    // The match scope can go live a frame before its install lands.
+    let Some(installed) = installed else {
+        return;
+    };
     let archived = adopted.next().is_some_and(|snap| {
         snap.players.iter().any(|(id, ps)| {
             local.as_ref().is_some_and(|local| *id == local.0) && !ps.is_live_frame()
@@ -208,8 +212,11 @@ pub(crate) fn sync_authority_entities(
     identities: Query<&CEntity>,
     mut runtimes: Query<&mut CEntityRuntime>,
     mut census: ResMut<CEntityBirthCensus>,
-    installed: Res<frame::InstalledMatch>,
+    installed: Option<Res<frame::InstalledMatch>>,
 ) {
+    let Some(installed) = installed else {
+        return;
+    };
     let players = server_tick
         .0
         .as_ref()

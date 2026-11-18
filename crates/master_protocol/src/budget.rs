@@ -15,18 +15,25 @@ pub struct TransportBudget {
     pub queue_bytes: usize,
 }
 
+/// A browser tab compiles its shaders on the page's own time, and phones are
+/// slower still: peers wait several times longer before giving up on a load.
+#[cfg(target_arch = "wasm32")]
+const PATIENCE: u32 = 8;
+#[cfg(not(target_arch = "wasm32"))]
+const PATIENCE: u32 = 1;
+
 impl Default for TransportBudget {
     fn default() -> Self {
         Self {
             response: Duration::from_secs(20),
             progress: Duration::from_secs(5),
-            transfer: Duration::from_secs(90),
+            transfer: Duration::from_secs(90) * PATIENCE,
             queue_age: Duration::from_secs(20),
             connect: Duration::from_secs(60),
             shutdown: Duration::from_millis(500),
-            loading: Duration::from_secs(120),
-            silence: Duration::from_secs(60),
-            admission: Duration::from_secs(60),
+            loading: Duration::from_secs(120) * PATIENCE,
+            silence: Duration::from_secs(60) * PATIENCE,
+            admission: Duration::from_secs(60) * PATIENCE,
             queue_items: 32,
             queue_bytes: 8 * 1024 * 1024,
         }

@@ -450,6 +450,10 @@ fn run_menu(
         artifacts,
     };
     let mut app = App::new();
+    // A browser tab cannot afford to die on a system whose parameter is not
+    // ready yet; the frame that hits it is skipped and the next one retries.
+    #[cfg(target_arch = "wasm32")]
+    app.set_error_handler(bevy::ecs::error::warn);
     if std::env::var_os("IW4L_PRESENT_MODE").is_some() {
         app.insert_resource(ui::PresentModeOverride(launch_present_mode(false)));
     }
@@ -694,6 +698,10 @@ fn run_map(
         .or_else(|| AcceptanceRun::from_env(zone.clone()));
     let present_mode = launch_present_mode(acceptance_run.is_some());
     let mut app = App::new();
+    // A browser tab cannot afford to die on a system whose parameter is not
+    // ready yet; the frame that hits it is skipped and the next one retries.
+    #[cfg(target_arch = "wasm32")]
+    app.set_error_handler(bevy::ecs::error::warn);
     if acceptance_run.is_some() || std::env::var_os("IW4L_PRESENT_MODE").is_some() {
         app.insert_resource(ui::PresentModeOverride(present_mode));
     }
