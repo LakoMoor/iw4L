@@ -399,13 +399,27 @@ pub fn remove_dir_all(path: impl AsRef<Path>) -> io::Result<()> {
 }
 
 /// Files the engine wrote (not mounted shards) under `prefix`, for the page to keep.
-pub fn export_written(prefix: impl AsRef<Path>) -> Vec<(String, Vec<u8>)> {
-    fn walk(dir: &Dir, here: &mut Vec<String>, out: &mut Vec<(String, Vec<u8>)>) {
+pub fn export_written(
+    prefix: impl AsRef<Path>,
+    keep: impl Fn(&str, usize) -> bool,
+) -> Vec<(String, Vec<u8>)> {
+    fn walk(
+        dir: &Dir,
+        here: &mut Vec<String>,
+        keep: &dyn Fn(&str, usize) -> bool,
+        out: &mut Vec<(String, Vec<u8>)>,
+    ) {
         for (name, node) in dir.0.values() {
             here.push(name.clone());
             match node {
-                Node::Dir(d) => walk(d, here, out),
-                Node::File(Data::Mem(bytes)) => out.push((here.join("/"), bytes.as_ref().clone())),
+                Node::Dir(d) => walk(d, here, keep, out),
+                Node::File(Data::Mem(bytes)) => {
+                    // Decide before copying: some files (the log) are huge.
+                    let path = here.join("/");
+                    if keep(&path, bytes.len()) {
+                        out.push((path, bytes.as_ref().clone()));
+                    }
+                }
                 Node::File(_) => {}
             }
             here.pop();
@@ -416,7 +430,7 @@ pub fn export_written(prefix: impl AsRef<Path>) -> Vec<(String, Vec<u8>)> {
     let mut out = Vec::new();
     if let Some(Node::Dir(dir)) = tree.get(&comps) {
         let mut here = comps.clone();
-        walk(dir, &mut here, &mut out);
+        walk(dir, &mut here, &keep, &mut out);
     }
     out
 }

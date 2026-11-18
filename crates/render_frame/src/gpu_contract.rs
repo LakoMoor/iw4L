@@ -50,6 +50,10 @@ pub enum WgpuBindingKind {
     SamplerArray {
         count: u32,
     },
+
+    /// Browsers: a shadow map read with `textureGather` (32-bit float, not filterable).
+    ShadowTexture,
+    ShadowSampler,
 }
 
 pub const TEXTURE_TABLE_2D_CAPACITY: u32 = 8192;
@@ -110,6 +114,11 @@ fn per_sampler_bind_entries(abi: &PassProgramAbi) -> Vec<WgpuBindLayoutEntry> {
     let mut entries = Vec::with_capacity(abi.samplers.len() * 2);
     for sampler in &abi.samplers {
         let binding = d3d9_sm3::sampler_texture_binding(sampler.register);
+        if sampler.depth_compare {
+            entries.push(entry(binding, WgpuBindingKind::ShadowTexture));
+            entries.push(entry(binding + 1, WgpuBindingKind::ShadowSampler));
+            continue;
+        }
         entries.push(entry(
             binding,
             WgpuBindingKind::TextureArray {

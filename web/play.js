@@ -1,3 +1,4 @@
+Error.stackTraceLimit = 80;
 import { enableTouch, setTouchMode } from "./touch.js";
 import { Host, Guest, describePath } from "./rtc.js";
 import init, { mount_shard, run, run_map, net_open, net_close, net_message, net_tick, net_host, net_join_first, net_start, audio_tick, audio_pull, persist_dump, persist_load } from "./pkg/iw4l_web.js";

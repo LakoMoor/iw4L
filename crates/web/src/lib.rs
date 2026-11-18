@@ -69,11 +69,13 @@ mod entry {
     #[wasm_bindgen]
     pub fn persist_dump() -> Vec<u8> {
         let mut packed = Vec::new();
-        for (path, bytes) in vfs::export_written("/iw4l-artifacts") {
+        let wanted = |path: &str, len: usize| {
             let lower = path.to_lowercase();
-            if !(lower.ends_with(".cfg") || lower.ends_with(".txt")) || lower.contains("log") {
-                continue;
-            }
+            len <= 1 << 20
+                && (lower.ends_with(".cfg") || lower.ends_with(".txt"))
+                && !lower.contains("log")
+        };
+        for (path, bytes) in vfs::export_written("/iw4l-artifacts", wanted) {
             packed.extend_from_slice(&(path.len() as u32).to_le_bytes());
             packed.extend_from_slice(path.as_bytes());
             packed.extend_from_slice(&(bytes.len() as u32).to_le_bytes());

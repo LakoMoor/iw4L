@@ -779,6 +779,12 @@ pub fn bind_group_layout_from_entries(
             WgpuBindingKind::SamplerArray { count } => sampler(SamplerBindingType::Filtering)
                 .visibility(visibility)
                 .count_if_native(count),
+            WgpuBindingKind::ShadowTexture => {
+                texture_2d(TextureSampleType::Float { filterable: false }).visibility(visibility)
+            }
+            WgpuBindingKind::ShadowSampler => {
+                sampler(SamplerBindingType::NonFiltering).visibility(visibility)
+            }
         };
         built.push(builder.build(u32::from(entry.binding), visibility));
     }
@@ -1718,6 +1724,7 @@ impl ExactPrepare<'_> {
         let device = self.device;
         let registry = self.registry;
         let port_id = executable.port;
+        let shadow_pass = matches!(self.textures, PrepareTextureTables::Shadow { .. });
         let resolve = |table: &mut ExactTextureTable| -> Result<(Arc<[u32]>, Option<BindGroup>), GpuSubmitRefusal> {
             let textures = port_gpu
                 .port
@@ -1742,11 +1749,12 @@ impl ExactPrepare<'_> {
                     &textures,
                     &slots,
                     port_id,
+                    shadow_pass,
                 ))
             };
             #[cfg(not(target_arch = "wasm32"))]
             let bind = {
-                let _ = (registry, port_id);
+                let _ = (registry, port_id, shadow_pass);
                 None
             };
             Ok((slots, bind))

@@ -114,7 +114,33 @@ fn drop_declaration_lines(text: &mut String, names: &[&str]) {
     *text = out;
 }
 
-/// Without bindless textures there is no shadow-map atlas to compare against.
+/// Rewrites `sm3_shadow_compare(sm3_slot_sN, ...)` calls into per-register
+/// functions over the bound texture, returns the registers it declared.
+fn per_register_shadow_compare(text: &mut String) -> alloc::vec::Vec<u16> {
+    let mut registers = alloc::vec::Vec::new();
+    let needle = "sm3_shadow_compare(sm3_slot_s";
+    let mut from = 0;
+    while let Some(found) = text[from..].find(needle) {
+        let start = from + found;
+        let digits_at = start + needle.len();
+        let digits: String = text[digits_at..].chars().take_while(char::is_ascii_digit).collect();
+        let Ok(register) = digits.parse::<u16>() else {
+            from = digits_at;
+            continue;
+        };
+        let after = digits_at + digits.len();
+        let rest = text[after..].strip_prefix(", ").map_or(0, |_| 2);
+        let name = format!("sm3_shadow_compare_s{register}(");
+        text.replace_range(start..after + rest, &name);
+        from = start + name.len();
+        if !registers.contains(&register) {
+            registers.push(register);
+        }
+    }
+    registers
+}
+
+/// The shared comparison helper indexes a table that no longer exists.
 fn drop_shadow_compare(text: &mut String) {
     const SIGNATURE: &str = "fn sm3_shadow_compare(";
     if let Some(start) = text.find(SIGNATURE)
@@ -130,8 +156,12 @@ fn drop_shadow_compare(text: &mut String) {
 pub fn flatten_texture_tables(wgsl: &str) -> String {
     let mut text = wgsl.replace("enable wgpu_binding_array;\n", "");
 
+    let shadow_registers = per_register_shadow_compare(&mut text);
     drop_shadow_compare(&mut text);
-    let used = per_register_bindings(&mut text);
+    let mut used = per_register_bindings(&mut text);
+    for register in &shadow_registers {
+        used.insert(*register, "texture_2d<f32>");
+    }
     if text.contains(" var sm3_") {
     drop_declaration_lines(
         &mut text,
@@ -150,6 +180,18 @@ pub fn flatten_texture_tables(wgsl: &str) -> String {
             declarations.push_str(&format!(
                 "@group(1) @binding({binding}) var sm3_tex_s{register}: {ty};\n@group(1) @binding({}) var sm3_smp_s{register}: sampler;\n",
                 binding + 1
+            ));
+        }
+        for register in &shadow_registers {
+            declarations.push_str(&format!(
+                "fn sm3_shadow_compare_s{register}(uv: vec2<f32>, z: f32) -> f32 {{
+    let size = vec2<f32>(textureDimensions(sm3_tex_s{register}));
+    let stored = textureGather(0, sm3_tex_s{register}, sm3_smp_s{register}, uv);
+    let lit = select(vec4<f32>(0.0), vec4<f32>(1.0), stored >= vec4<f32>(z));
+    let f = fract(uv * size - 0.5);
+    return mix(mix(lit.w, lit.z, f.x), mix(lit.x, lit.y, f.x), f.y);
+}}
+"
             ));
         }
         // Module-scope bindings may come first; an entry-point attribute stays with its function.
@@ -215,6 +257,25 @@ mod tests {
         assert!(out.contains("return 1.0;"));
         assert!(out.contains("fn g() {}"));
         assert!(!out.contains("textureDimensions"));
+    }
+
+    #[test]
+    fn shadow_samples_read_the_bound_register() {
+        let wgsl = "@group(1) @binding(2) var sm3_textures_2d: binding_array<texture_2d<f32>>;
+@group(1) @binding(3) var sm3_samplers: binding_array<sampler>;
+fn sm3_shadow_compare(slot: u32, uv: vec2<f32>, z: f32) -> f32 {
+    return 0.0;
+}
+fn f(uv: vec2<f32>) -> f32 {
+    let sm3_slot_s2 = 1u;
+    return sm3_shadow_compare(sm3_slot_s2, uv, 0.5);
+}
+";
+        let out = flatten_texture_tables(wgsl);
+        assert!(out.contains("return sm3_shadow_compare_s2(uv, 0.5);"));
+        assert!(out.contains("fn sm3_shadow_compare_s2(uv: vec2<f32>, z: f32) -> f32 {"));
+        assert!(out.contains("textureGather(0, sm3_tex_s2, sm3_smp_s2, uv)"));
+        assert!(out.contains("@group(1) @binding(4) var sm3_tex_s2: texture_2d<f32>;"));
     }
 
     #[test]

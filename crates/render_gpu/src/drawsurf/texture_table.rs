@@ -56,6 +56,8 @@ pub(super) struct TextureTableBinds {
 struct Placeholders {
     views: [TextureView; 3],
     sampler: Sampler,
+    /// Shadow maps are read with `textureGather`, which wants a non-filtering sampler.
+    nearest: Sampler,
 }
 
 pub(super) struct RegisterBinding {
@@ -63,6 +65,7 @@ pub(super) struct RegisterBinding {
     pub dimension: SamplerTextureDimension,
     pub view: Option<TextureView>,
     pub sampler: Option<Sampler>,
+    pub shadow: bool,
 }
 
 /// Textures a filtering sampler cannot read in a browser (32-bit float depth
@@ -210,6 +213,7 @@ impl ExactTextureTable {
         textures: &[UploadedTextureBind],
         slots: &Arc<[u32]>,
         port: PortId,
+        shadow_pass: bool,
     ) -> BindGroup {
         self.ensure_placeholders(device);
         let bindings: Vec<RegisterBinding> = abi
@@ -218,7 +222,14 @@ impl ExactTextureTable {
             .map(|(ordinal, binding)| {
                 let lane = textures.iter().find(|lane| lane.register == binding.register);
                 let view = lane
-                    .filter(|lane| !placeholder_identity(lane.identity))
+                    .filter(|lane| {
+                        if binding.depth_compare {
+                            // The shadow map cannot be sampled while it is being drawn into.
+                            !shadow_pass
+                        } else {
+                            !placeholder_identity(lane.identity)
+                        }
+                    })
                     .map(|lane| lane.view.clone());
                 let sampler = slots
                     .get(ordinal)
@@ -229,6 +240,7 @@ impl ExactTextureTable {
                     dimension: binding.dimension,
                     view,
                     sampler,
+                    shadow: binding.depth_compare,
                 }
             })
             .collect();
@@ -257,6 +269,7 @@ impl ExactTextureTable {
                 None => &*placeholders.views[dimension_lane(binding.dimension)],
             };
             let sampler: &WgpuSampler = match &binding.sampler {
+                _ if binding.shadow => &*placeholders.nearest,
                 Some(sampler) => &**sampler,
                 None => &*placeholders.sampler,
             };
@@ -376,6 +389,7 @@ impl ExactTextureTable {
                         dimension: binding.dimension,
                         view: views.get((word & 0xffff) as usize).map(|view| (*view).clone()),
                         sampler: samplers.get((word >> 16) as usize).map(|sampler| (*sampler).clone()),
+                        shadow: binding.depth_compare,
                     }
                 })
                 .collect();
@@ -522,6 +536,13 @@ impl ExactTextureTable {
                 ],
                 sampler: device.create_sampler(&SamplerDescriptor {
                     label: Some("iw4_texture_table_placeholder_sampler"),
+                    ..default()
+                }),
+                nearest: device.create_sampler(&SamplerDescriptor {
+                    label: Some("iw4_texture_table_nearest_sampler"),
+                    mag_filter: bevy::render::render_resource::FilterMode::Nearest,
+                    min_filter: bevy::render::render_resource::FilterMode::Nearest,
+                    mipmap_filter: bevy::render::render_resource::MipmapFilterMode::Nearest,
                     ..default()
                 }),
             }
