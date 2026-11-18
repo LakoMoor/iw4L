@@ -207,6 +207,7 @@ fn record_colour_run<'a>(
     let mut bound_depth = None;
     let mut bound_arena = None;
     let mut textures_bound = false;
+    let mut bound_texture_group = None;
 
     let indirect_args = input.indirect_args;
     let mut batch = indirect::IndirectBatch::default();
@@ -321,9 +322,13 @@ fn record_colour_run<'a>(
             bound_arena = Some(draw.arena_lane);
             result.bindings.group0 = result.bindings.group0.saturating_add(1);
         }
-        if !textures_bound {
-            pass.set_bind_group(1, textures_bind, &[]);
+        let own_textures = draw.texture_bind.as_ref();
+        let own_id = own_textures.map(|group| group.id());
+        if !textures_bound || (own_id.is_some() && own_id != bound_texture_group) {
+            issue_indirect_batch!();
+            pass.set_bind_group(1, own_textures.unwrap_or(textures_bind), &[]);
             textures_bound = true;
+            bound_texture_group = own_id;
             result.bindings.group1 = result.bindings.group1.saturating_add(1);
         }
         if draw.tess == ExactTessBind::World {

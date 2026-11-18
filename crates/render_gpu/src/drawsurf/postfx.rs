@@ -959,6 +959,11 @@ fn draw_postfx(
             })
             .collect();
         let key = (ready.film.port.id(), views.iter().map(|v| v.id()).collect());
+        let slot_bytes = d3d9_sm3::texture_slot_rows(ready.film.port.module().sampler_count) * 16;
+        let slots: Vec<u32> = bytes[bytes.len().saturating_sub(slot_bytes)..]
+            .chunks_exact(4)
+            .map(|word| u32::from_le_bytes([word[0], word[1], word[2], word[3]]))
+            .collect();
         let textures = texture_cache.groups.entry(key).or_insert_with(|| {
             texture_table.views_bind_group(
                 &device,
@@ -969,6 +974,8 @@ fn draw_postfx(
                     &ready.sampler,
                     gpu.depth_sampler.as_ref().expect("prepared"),
                 ],
+                &ready.film.port.abi().samplers,
+                &slots,
             )
         });
         let destination = if step.target == Image::Output {

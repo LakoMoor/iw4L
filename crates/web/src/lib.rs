@@ -64,6 +64,20 @@ mod entry {
         packed
     }
 
+    /// Step the audio control loop and prepare queued clips (called from the page timer).
+    #[wasm_bindgen]
+    pub fn audio_tick() {
+        audio::browser_tick();
+    }
+
+    /// Interleaved stereo samples for the page's Web Audio node.
+    #[wasm_bindgen]
+    pub fn audio_pull(frames: u32, device_rate: u32) -> Vec<f32> {
+        let mut out = Vec::new();
+        audio::browser_pull(frames as usize, device_rate, &mut out);
+        out
+    }
+
     /// Create a room on this tab (the menu's CREATE GAME).
     #[wasm_bindgen]
     pub fn net_host(map: &str, mode: &str) {

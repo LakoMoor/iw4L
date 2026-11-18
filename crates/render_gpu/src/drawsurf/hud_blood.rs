@@ -181,12 +181,20 @@ impl BloodPortGpu {
             .as_ref()
             .is_none_or(|(cached, _)| *cached != key)
         {
+            let slots: Vec<u32> = self
+                .blood
+                .texture_slots
+                .iter()
+                .map(|&slot| d3d9_sm3::texture_slot_word(u16::from(slot), u16::from(slot)))
+                .collect();
             let group = table.views_bind_group(
                 device,
                 &cache.get_bind_group_layout(&self.textures_layout),
                 "iw4_blood_textures",
                 &[&color.texture_view, &mask.texture_view],
                 &[&color.sampler, &mask.sampler],
+                &self.blood.film.port.abi().samplers,
+                &slots,
             );
             self.textures = Some((key, group));
         }

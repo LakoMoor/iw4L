@@ -22,10 +22,6 @@ pub struct AudioSilent;
 
 impl AudioSilent {
     pub fn active() -> bool {
-        // No audio device runtime in the browser yet: matches load silent.
-        if cfg!(target_arch = "wasm32") {
-            return true;
-        }
         static SILENT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         *SILENT.get_or_init(|| {
             std::env::var("IW4L_SOUND").is_ok_and(|value| matches!(value.as_str(), "off" | "0"))

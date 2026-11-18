@@ -70,6 +70,19 @@ pub use admission::AdmissionFailure;
 pub use render_core::InstanceStatus;
 pub use runtime::{AudioDiagnostics, AudioRuntime};
 
+/// Browser frame pump: prepares queued clips and steps the mixer control loop.
+#[cfg(target_arch = "wasm32")]
+pub fn browser_tick() {
+    clip_store::pump_inline_all(std::time::Duration::from_millis(3));
+    runtime::browser::tick();
+}
+
+/// Browser output: `frames` interleaved stereo samples at the device rate.
+#[cfg(target_arch = "wasm32")]
+pub fn browser_pull(frames: usize, device_rate: u32, out: &mut Vec<f32>) {
+    runtime::browser::pull(frames, device_rate, out);
+}
+
 mod media;
 mod mix_bus;
 

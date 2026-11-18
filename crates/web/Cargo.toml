@@ -19,6 +19,7 @@ diag = { path = "../diag" }
 vfs = { path = "../vfs" }
 sim = { path = "../sim" }
 net = { path = "../net" }
+audio = { path = "../audio" }
 
 [lints]
 workspace = true

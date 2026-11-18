@@ -1,6 +1,6 @@
 import { enableTouch } from "./touch.js";
 import { Host, Guest, describePath } from "./rtc.js";
-import init, { mount_shard, run, run_map, net_open, net_close, net_message, net_tick, net_host, net_join_first, net_start } from "./pkg/iw4l_web.js";
+import init, { mount_shard, run, run_map, net_open, net_close, net_message, net_tick, net_host, net_join_first, net_start, audio_tick, audio_pull } from "./pkg/iw4l_web.js";
 
 const GAME_DIR = "Call of Duty Modern Warfare 2";
 const $ = (id) => document.getElementById(id);
@@ -80,7 +80,7 @@ async function start() {
   if (params.has("launch")) run_map(params.get("launch")); else run();
 }
 
-$("start").addEventListener("click", () => start().catch((e) => log("error: " + e, "err")));
+$("start").addEventListener("click", () => { startAudio(); start().catch((e) => log("error: " + e, "err")); });
 if (packUrl) {
   urlSource(packUrl).then((src) => {
     source = src;
@@ -127,6 +127,7 @@ function wire(r) {
 // the relay is stepped here, not on a thread.
 setInterval(() => {
   if (!engineReady) return;
+  audio_tick();
   const packed = net_tick();
   const view = new DataView(packed.buffer, packed.byteOffset, packed.byteLength);
   for (let at = 0; at < packed.length;) {
@@ -215,3 +216,25 @@ const matchMap = () => params.get("launch") || $("map").value;
 $("eng-host").addEventListener("click", () => { net_host(matchMap(), "dm"); log("opening a room…"); });
 $("eng-join").addEventListener("click", () => { net_join_first(); log("joining the host's room…"); });
 $("eng-start").addEventListener("click", () => { net_start(matchMap(), "dm"); log("starting the match…"); });
+
+// Sound: the engine mixes in wasm; a Web Audio node pulls from it. Created from
+// the Start click so the browser lets it play.
+let audioCtx = null;
+export function startAudio() {
+  if (audioCtx) return;
+  try {
+    audioCtx = new AudioContext({ latencyHint: 'interactive' });
+    const node = audioCtx.createScriptProcessor(2048, 0, 2);
+    node.onaudioprocess = (e) => {
+      if (!engineReady) return;
+      const frames = e.outputBuffer.length;
+      const pcm = audio_pull(frames, audioCtx.sampleRate);
+      const l = e.outputBuffer.getChannelData(0), r = e.outputBuffer.getChannelData(1);
+      for (let i = 0; i < frames; i++) { l[i] = pcm[i * 2]; r[i] = pcm[i * 2 + 1]; }
+    };
+    node.connect(audioCtx.destination);
+    const resume = () => audioCtx.state !== 'running' && audioCtx.resume();
+    addEventListener('pointerdown', resume);
+    addEventListener('keydown', resume);
+  } catch (e) { console.warn('audio unavailable', e); }
+}

@@ -15,7 +15,7 @@ use bevy::render::render_resource::binding_types::{
     sampler, storage_buffer_read_only, texture_2d, texture_3d, texture_cube, uniform_buffer_sized,
 };
 use bevy::render::render_resource::{
-    BindGroupLayoutDescriptor, Buffer, BufferDescriptor, BufferUsages, ColorTargetState,
+    BindGroup, BindGroupLayoutDescriptor, Buffer, BufferDescriptor, BufferUsages, ColorTargetState,
     ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, Face, FrontFace,
     MultisampleState, PipelineCache, PolygonMode, PrimitiveState, SamplerBindingType, ShaderStages,
     SpecializedRenderPipelines, TextureFormat, TextureSampleType, TextureView,
@@ -1238,6 +1238,8 @@ struct PreparedExactDraw {
     constant_base: Option<u32>,
 
     texture_slots: Arc<[u32]>,
+    /// Browsers: the material's own textures, bound per draw.
+    texture_bind: Option<BindGroup>,
     start: u32,
     count: u32,
     tess: ExactTessBind,
@@ -1688,7 +1690,7 @@ impl ExactPrepare<'_> {
         executable: ExecutablePassView<'_>,
         surface: super::SurfaceSamplerInputs,
         after_scene_resolve: bool,
-    ) -> Result<Arc<[u32]>, GpuSubmitRefusal> {
+    ) -> Result<(Arc<[u32]>, Option<BindGroup>), GpuSubmitRefusal> {
         let port_gpu = self
             .pipeline_res
             .get(executable.port)
@@ -1714,7 +1716,9 @@ impl ExactPrepare<'_> {
         let sampler_table = self.sampler_table;
         let spot_shadow_select = self.spot_shadow_select;
         let device = self.device;
-        let resolve = |table: &mut ExactTextureTable| -> Result<Arc<[u32]>, GpuSubmitRefusal> {
+        let registry = self.registry;
+        let port_id = executable.port;
+        let resolve = |table: &mut ExactTextureTable| -> Result<(Arc<[u32]>, Option<BindGroup>), GpuSubmitRefusal> {
             let textures = port_gpu
                 .port
                 .resolve_uploaded_texture_binds(
@@ -1727,7 +1731,25 @@ impl ExactPrepare<'_> {
                     spot_shadow_select,
                 )
                 .map_err(GpuSubmitRefusal::TextureBind)?;
-            texture_slot_words(device, table, &textures)
+            let slots = texture_slot_words(device, table, &textures)?;
+            #[cfg(target_arch = "wasm32")]
+            let bind = {
+                let bgl = registry.bind_group_layout(device, &port_gpu.textures_layout);
+                Some(table.draw_bind_group(
+                    device,
+                    &bgl,
+                    &port_gpu.port.abi().samplers,
+                    &textures,
+                    &slots,
+                    port_id,
+                ))
+            };
+            #[cfg(not(target_arch = "wasm32"))]
+            let bind = {
+                let _ = (registry, port_id);
+                None
+            };
+            Ok((slots, bind))
         };
         let mut shared_guard;
         let (texture_slots, table) = match &mut self.textures {
@@ -1741,13 +1763,16 @@ impl ExactPrepare<'_> {
             PrepareTextureTables::Shadow { slots, table } => (&mut **slots, &mut **table),
         };
         if let Some(slots) = texture_slots.get(&key) {
-            self.cost.tex_bind_hit_n = self.cost.tex_bind_hit_n.saturating_add(1);
-            return Ok(Arc::clone(slots));
+            let bind = table.cached_draw_bind(slots, port_id);
+            if cfg!(not(target_arch = "wasm32")) || bind.is_some() {
+                self.cost.tex_bind_hit_n = self.cost.tex_bind_hit_n.saturating_add(1);
+                return Ok((Arc::clone(slots), bind));
+            }
         }
         self.cost.tex_bind_miss_n = self.cost.tex_bind_miss_n.saturating_add(1);
-        let slots = resolve(table)?;
+        let (slots, bind) = resolve(table)?;
         texture_slots.insert(key, Arc::clone(&slots));
-        Ok(slots)
+        Ok((slots, bind))
     }
 }
 
@@ -2797,7 +2822,7 @@ impl ExactPrepare<'_> {
                     }
                 };
                 let port_gpu = &pipeline_res.ports[port_index];
-                let texture_slots =
+                let (texture_slots, texture_bind) =
                     self.bind_hit_textures(executable, surface, after_scene_resolve)?;
                 // Shadow placement is applied after preparation, independently for each
                 // light and object. Its unplaced banks belong to the material run.
@@ -2860,6 +2885,7 @@ impl ExactPrepare<'_> {
                     constants,
                     constant_base,
                     texture_slots,
+                    texture_bind,
                     start,
                     count,
                     tess,

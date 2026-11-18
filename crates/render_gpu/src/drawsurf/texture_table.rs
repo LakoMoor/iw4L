@@ -15,7 +15,8 @@ use bevy::render::render_resource::{
 };
 use bevy::render::renderer::RenderDevice;
 use d3d9_sm3::{TEXTURE_TABLE_BINDING_2D, TEXTURE_TABLE_BINDING_3D, TEXTURE_TABLE_BINDING_CUBE};
-use render_material::{MaterialGenerationId, SamplerTextureDimension};
+use render_material::{MaterialGenerationId, PortId, SamplerBinding, SamplerTextureDimension};
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct SamplerKey {
@@ -57,6 +58,23 @@ struct Placeholders {
     sampler: Sampler,
 }
 
+pub(super) struct RegisterBinding {
+    pub register: u16,
+    pub dimension: SamplerTextureDimension,
+    pub view: Option<TextureView>,
+    pub sampler: Option<Sampler>,
+}
+
+/// Textures a filtering sampler cannot read in a browser (32-bit float depth
+/// and the shadow maps) stay on the placeholder.
+fn placeholder_identity(identity: UploadedTextureIdentity) -> bool {
+    match identity {
+        UploadedTextureIdentity::Code(code) => matches!(code, 0x0f | 6 | 7),
+        UploadedTextureIdentity::SpotShadowRt(_) => true,
+        _ => false,
+    }
+}
+
 #[derive(Resource, Default, Deref, DerefMut)]
 pub(super) struct ShadowTextureTable(pub ExactTextureTable);
 
@@ -85,6 +103,8 @@ pub(super) struct ExactTextureTable {
     sampler_index: HashMap<SamplerKey, u16>,
     placeholders: Option<Placeholders>,
     binds: Option<TextureTableBinds>,
+    /// Browsers: one bind group per distinct set of material textures.
+    draw_binds: HashMap<(Arc<[u32]>, PortId), BindGroup>,
 
     pub rebuild_n: u32,
 }
@@ -122,6 +142,7 @@ impl ExactTextureTable {
         self.sun_shadow_indices.clear();
         self.samplers.clear();
         self.sampler_index.clear();
+        self.draw_binds.clear();
         self.binds = None;
     }
 
@@ -175,6 +196,115 @@ impl ExactTextureTable {
         Ok(d3d9_sm3::texture_slot_word(texture, sampler))
     }
 
+    pub fn cached_draw_bind(&self, slots: &Arc<[u32]>, port: PortId) -> Option<BindGroup> {
+        self.draw_binds.get(&(Arc::clone(slots), port)).cloned()
+    }
+
+    /// Bind group carrying one texture and sampler per sampler register of
+    /// the program, for runtimes without binding arrays.
+    pub fn draw_bind_group(
+        &mut self,
+        device: &RenderDevice,
+        bgl: &bevy::render::render_resource::BindGroupLayout,
+        abi: &[SamplerBinding],
+        textures: &[UploadedTextureBind],
+        slots: &Arc<[u32]>,
+        port: PortId,
+    ) -> BindGroup {
+        self.ensure_placeholders(device);
+        let bindings: Vec<RegisterBinding> = abi
+            .iter()
+            .enumerate()
+            .map(|(ordinal, binding)| {
+                let lane = textures.iter().find(|lane| lane.register == binding.register);
+                let view = lane
+                    .filter(|lane| !placeholder_identity(lane.identity))
+                    .map(|lane| lane.view.clone());
+                let sampler = slots
+                    .get(ordinal)
+                    .and_then(|word| self.samplers.get(usize::try_from(word >> 16).ok()?))
+                    .cloned();
+                RegisterBinding {
+                    register: binding.register,
+                    dimension: binding.dimension,
+                    view,
+                    sampler,
+                }
+            })
+            .collect();
+        let group = self.register_bind_group(device, bgl, "iw4_draw_textures", &bindings);
+        self.draw_binds
+            .insert((Arc::clone(slots), port), group.clone());
+        group
+    }
+
+    /// One binding pair per sampler register; missing pieces fall back to
+    /// the 1x1 placeholders.
+    pub fn register_bind_group(
+        &mut self,
+        device: &RenderDevice,
+        bgl: &bevy::render::render_resource::BindGroupLayout,
+        label: &'static str,
+        bindings: &[RegisterBinding],
+    ) -> BindGroup {
+        self.ensure_placeholders(device);
+        let placeholders = self.placeholders.as_ref().expect("built above");
+        let mut entries = Vec::with_capacity(bindings.len() * 2);
+        for binding in bindings {
+            let first = d3d9_sm3::sampler_texture_binding(binding.register);
+            let view: &WgpuTextureView = match &binding.view {
+                Some(view) => &**view,
+                None => &*placeholders.views[dimension_lane(binding.dimension)],
+            };
+            let sampler: &WgpuSampler = match &binding.sampler {
+                Some(sampler) => &**sampler,
+                None => &*placeholders.sampler,
+            };
+            entries.push(BindGroupEntry {
+                binding: first,
+                resource: BindingResource::TextureView(view),
+            });
+            entries.push(BindGroupEntry {
+                binding: first + 1,
+                resource: BindingResource::Sampler(sampler),
+            });
+        }
+        device.create_bind_group(label, bgl, &entries)
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn placeholder_group(
+        &self,
+        device: &RenderDevice,
+        bgl: &bevy::render::render_resource::BindGroupLayout,
+        layout: &BindGroupLayoutDescriptor,
+    ) -> BindGroup {
+        use bevy::render::render_resource::BindingType;
+        let placeholders = self.placeholders.as_ref().expect("placeholders exist once the table is built");
+        let entries: Vec<BindGroupEntry> = layout
+            .entries
+            .iter()
+            .filter_map(|entry| {
+                let resource = match entry.ty {
+                    BindingType::Texture { view_dimension, .. } => BindingResource::TextureView(
+                        &*placeholders.views[match view_dimension {
+                            TextureViewDimension::Cube => 1,
+                            TextureViewDimension::D3 => 2,
+                            _ => 0,
+                        }],
+                    ),
+                    BindingType::Sampler(_) => BindingResource::Sampler(&*placeholders.sampler),
+                    _ => return None,
+                };
+                Some(BindGroupEntry {
+                    binding: entry.binding,
+                    resource,
+                })
+            })
+            .collect();
+        device.create_bind_group("iw4_texture_table_placeholder", bgl, &entries)
+    }
+
     pub fn census(&self) -> (usize, usize, usize, usize) {
         let n = |lane: &Vec<TextureView>| lane.len().saturating_sub(1);
         (
@@ -194,6 +324,18 @@ impl ExactTextureTable {
         self.ensure_placeholders(device);
         if self.binds.is_none() {
             let bgl = registry.bind_group_layout(device, layout);
+            #[cfg(target_arch = "wasm32")]
+            {
+                // Draws carry their own textures; this group only fills the slot.
+                let scene = self.placeholder_group(device, &bgl, layout);
+                self.rebuild_n = self.rebuild_n.saturating_add(1);
+                self.binds = Some(TextureTableBinds {
+                    sun_caster: scene.clone(),
+                    scene,
+                });
+                return self.binds.as_ref().expect("built above");
+            }
+            #[allow(unreachable_code)]
             let placeholder_2d = self.views[0][0].clone();
             let scene = self.create_bind_group(device, &bgl, "iw4_texture_table_scene", None);
             let sun_caster = if self.sun_shadow_indices.is_empty() {
@@ -219,7 +361,29 @@ impl ExactTextureTable {
         label: &'static str,
         views: &[&TextureView],
         samplers: &[&Sampler],
+        abi: &[SamplerBinding],
+        slots: &[u32],
     ) -> BindGroup {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let bindings: Vec<RegisterBinding> = abi
+                .iter()
+                .enumerate()
+                .map(|(ordinal, binding)| {
+                    let word = slots.get(ordinal).copied().unwrap_or(0);
+                    RegisterBinding {
+                        register: binding.register,
+                        dimension: binding.dimension,
+                        view: views.get((word & 0xffff) as usize).map(|view| (*view).clone()),
+                        sampler: samplers.get((word >> 16) as usize).map(|sampler| (*sampler).clone()),
+                    }
+                })
+                .collect();
+            return self.register_bind_group(device, bgl, label, &bindings);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        let _ = (abi, slots);
+        #[allow(unreachable_code)]
         let views: Vec<&WgpuTextureView> = views.iter().map(|v| &***v).collect();
         let samplers: Vec<&WgpuSampler> = samplers.iter().map(|v| &***v).collect();
         self.ensure_placeholders(device);

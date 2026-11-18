@@ -104,6 +104,21 @@ impl MediaJobQueue {
         }
     }
 
+    /// Next job without waiting; the browser prepares clips from its frame pump.
+    pub fn try_pop(&self) -> Option<ClipJob> {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        if state.closed {
+            return None;
+        }
+        state
+            .urgent
+            .pop_front()
+            .or_else(|| state.prewarm.pop_front())
+    }
+
     pub fn close(&self) {
         self.state
             .lock()

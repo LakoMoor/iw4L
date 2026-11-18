@@ -96,6 +96,32 @@ pub fn texture_table_bind_entries() -> [WgpuBindLayoutEntry; 4] {
     ]
 }
 
+/// Browsers have no binding arrays: each sampler register of the program gets
+/// its own texture and sampler binding (see `d3d9_sm3::flatten_texture_tables`).
+#[cfg(target_arch = "wasm32")]
+fn per_sampler_bind_entries(abi: &PassProgramAbi) -> Vec<WgpuBindLayoutEntry> {
+    let entry = |binding: u32, kind| WgpuBindLayoutEntry {
+        group: u8::try_from(d3d9_sm3::TEXTURE_TABLE_GROUP).expect("group 1"),
+        binding: u16::try_from(binding).expect("sampler binding fits u16"),
+        visibility: WgpuShaderVisibility::VertexFragment,
+        kind,
+        register_packed: None,
+    };
+    let mut entries = Vec::with_capacity(abi.samplers.len() * 2);
+    for sampler in &abi.samplers {
+        let binding = d3d9_sm3::sampler_texture_binding(sampler.register);
+        entries.push(entry(
+            binding,
+            WgpuBindingKind::TextureArray {
+                dimension: sampler.dimension,
+                count: 1,
+            },
+        ));
+        entries.push(entry(binding + 1, WgpuBindingKind::SamplerArray { count: 1 }));
+    }
+    entries
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct WgpuBindLayoutEntry {
     pub group: u8,
@@ -196,7 +222,10 @@ pub fn derive_wgpu_pass_layout(
         register_packed: None,
     });
 
+    #[cfg(not(target_arch = "wasm32"))]
     bind_entries.extend(texture_table_bind_entries());
+    #[cfg(target_arch = "wasm32")]
+    bind_entries.extend(per_sampler_bind_entries(abi));
 
     Ok(WgpuPassLayout {
         vertex_buffers,

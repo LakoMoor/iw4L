@@ -273,6 +273,7 @@ struct MediaServiceInner {
     requests: Arc<Mutex<MediaRequests>>,
     outcomes: Arc<Mutex<Outcomes>>,
     workers: Option<ClipWorkers>,
+    iwd: Option<Arc<NamespaceSoundIwd>>,
     retirement: Sender<ClipWorkers>,
     clip_cache: Option<PreparedClipCache>,
     common_profile_id: u64,
@@ -378,6 +379,76 @@ impl ClipStore {
     }
 }
 
+/// Prepares one queued clip and publishes the outcome.
+fn process_job(
+    job: ClipJob,
+    bank: &Arc<SoundCatalog>,
+    iwd: Option<&NamespaceSoundIwd>,
+    requests: &Mutex<MediaRequests>,
+    outcomes: &Mutex<Outcomes>,
+    clip_cache: Option<&PreparedClipCache>,
+    common_profile_id: u64,
+    stop: &AtomicBool,
+) {
+        QUEUE_WAIT_NS.fetch_add(job.queued_at.elapsed().as_nanos() as u64, Ordering::Relaxed);
+        let prepare_at = Instant::now();
+        let (path, mut result) = prepare_clip_now(bank, iwd, &job.key);
+        note_prepared(path, prepare_at, result.as_ref());
+        if matches!(result, Err(ClipError::InvalidPcm(crate::media::PcmError::MemoryLimit)))
+            && !stop.load(Ordering::Acquire)
+            && evict_idle_streamed(requests, outcomes) != 0
+        {
+            let retry_at = Instant::now();
+            let (path, retry) = prepare_clip_now(bank, iwd, &job.key);
+            note_prepared(path, retry_at, retry.as_ref());
+            result = retry;
+        }
+        if stop.load(Ordering::Acquire) {
+            return;
+        }
+        if let Some(cache) = clip_cache
+            && let Ok(pcm) = &result
+            && let Some((key, common)) = resident_clip_key(bank, &job.key)
+        {
+            cache.remember(common_profile_id, key, common, pcm.clone());
+        }
+        if crate::diagnostics::enabled() {
+            let result_detail = match &result {
+                Ok(pcm) => format!("ready frames={} rate={}", pcm.len() / usize::from(pcm.channels()), pcm.rate()),
+                Err(error) => format!("failed {error:?}"),
+            };
+            crate::diagnostics::emit(format!("audio diag: media key={:?} queued_to_publish_ms={:.3} prepare_ms={:.3} {result_detail}", job.key, job.queued_at.elapsed().as_secs_f64()*1000.0, prepare_at.elapsed().as_secs_f64()*1000.0));
+        }
+        outcomes.lock().unwrap_or_else(|poison| poison.into_inner())
+            .insert(job.key, (result, USE_TICK.fetch_add(1, Ordering::Relaxed)));
+}
+
+#[cfg(target_arch = "wasm32")]
+thread_local! {
+    static INLINE_SERVICES: std::cell::RefCell<Vec<std::sync::Weak<MediaServiceInner>>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Browser: prepares queued clips of every live store on the calling thread.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn pump_inline_all(budget: std::time::Duration) -> usize {
+    let started = Instant::now();
+    let live: Vec<MediaService> = INLINE_SERVICES.with(|list| {
+        let mut list = list.borrow_mut();
+        list.retain(|weak| weak.strong_count() > 0);
+        list.iter().filter_map(|weak| weak.upgrade().map(MediaService)).collect()
+    });
+    let mut done = 0;
+    for service in live {
+        let left = budget.saturating_sub(started.elapsed());
+        if left.is_zero() {
+            break;
+        }
+        done += service.pump_inline(left);
+    }
+    done
+}
+
 impl MediaService {
     fn start_with_common(
         bank: Arc<SoundCatalog>,
@@ -390,6 +461,7 @@ impl MediaService {
             cache.use_bank(&bank);
         }
         let (retirement, retired_workers) = channel::<ClipWorkers>();
+        #[cfg(not(target_arch = "wasm32"))]
         if let Err(error) = std::thread::Builder::new()
             .name("audio-media-retire".into())
             .spawn(move || {
@@ -403,6 +475,10 @@ impl MediaService {
                 "audio: media retirement thread not started ({error})"
             );
         }
+        // The browser has no worker threads; its frame pump prepares the queue.
+        #[cfg(target_arch = "wasm32")]
+        let workers = 0;
+        #[cfg(not(target_arch = "wasm32"))]
         let workers = std::thread::available_parallelism()
             .map(|n| n.get().saturating_sub(2).clamp(2, 4))
             .unwrap_or(2);
@@ -437,37 +513,16 @@ impl MediaService {
                         if stop_worker.load(Ordering::Acquire) {
                             return;
                         }
-                        QUEUE_WAIT_NS.fetch_add(job.queued_at.elapsed().as_nanos() as u64, Ordering::Relaxed);
-                        let prepare_at = Instant::now();
-                        let (path, mut result) = prepare_clip_now(&bank, iwd.as_deref(), &job.key);
-                        note_prepared(path, prepare_at, result.as_ref());
-                        if matches!(result, Err(ClipError::InvalidPcm(crate::media::PcmError::MemoryLimit)))
-                            && !stop_worker.load(Ordering::Acquire)
-                            && evict_idle_streamed(&requests, &outcomes) != 0
-                        {
-                            let retry_at = Instant::now();
-                            let (path, retry) = prepare_clip_now(&bank, iwd.as_deref(), &job.key);
-                            note_prepared(path, retry_at, retry.as_ref());
-                            result = retry;
-                        }
-                        if stop_worker.load(Ordering::Acquire) {
-                            return;
-                        }
-                        if let Some(cache) = &clip_cache
-                            && let Ok(pcm) = &result
-                            && let Some((key, common)) = resident_clip_key(&bank, &job.key)
-                        {
-                            cache.remember(common_profile_id, key, common, pcm.clone());
-                        }
-                        if crate::diagnostics::enabled() {
-                            let result_detail = match &result {
-                                Ok(pcm) => format!("ready frames={} rate={}", pcm.len() / usize::from(pcm.channels()), pcm.rate()),
-                                Err(error) => format!("failed {error:?}"),
-                            };
-                            crate::diagnostics::emit(format!("audio diag: media key={:?} queued_to_publish_ms={:.3} prepare_ms={:.3} {result_detail}", job.key, job.queued_at.elapsed().as_secs_f64()*1000.0, prepare_at.elapsed().as_secs_f64()*1000.0));
-                        }
-                        outcomes.lock().unwrap_or_else(|poison| poison.into_inner())
-                            .insert(job.key, (result, USE_TICK.fetch_add(1, Ordering::Relaxed)));
+                        process_job(
+                            job,
+                            &bank,
+                            iwd.as_deref(),
+                            &requests,
+                            &outcomes,
+                            clip_cache.as_ref(),
+                            common_profile_id,
+                            &stop_worker,
+                        );
                     }
                 });
             match spawned {
@@ -479,12 +534,12 @@ impl MediaService {
                 Err(e) => diag::warn!(Audio, "audio: clip prep worker {slot} not started ({e})"),
             }
         }
-        if !urgent_started || !general_started {
+        if cfg!(not(target_arch = "wasm32")) && (!urgent_started || !general_started) {
             stop.store(true, Ordering::Release);
             queue.close();
         }
         WORKERS.fetch_add(handles.len() as u64, Ordering::Relaxed);
-        Self(Arc::new(MediaServiceInner {
+        let service = Self(Arc::new(MediaServiceInner {
             bank,
             queue: Arc::clone(&queue),
             requests,
@@ -494,10 +549,38 @@ impl MediaService {
                 stop,
                 queue,
             }),
+            iwd,
             retirement,
             clip_cache,
             common_profile_id,
-        }))
+        }));
+        #[cfg(target_arch = "wasm32")]
+        INLINE_SERVICES.with(|list| list.borrow_mut().push(Arc::downgrade(&service.0)));
+        service
+    }
+
+    /// Prepares queued clips on the calling thread until `budget` is spent.
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn pump_inline(&self, budget: std::time::Duration) -> usize {
+        let started = Instant::now();
+        let mut done = 0;
+        while let Some(job) = self.0.queue.try_pop() {
+            process_job(
+                job,
+                &self.0.bank,
+                self.0.iwd.as_deref(),
+                &self.0.requests,
+                &self.0.outcomes,
+                self.0.clip_cache.as_ref(),
+                self.0.common_profile_id,
+                &AtomicBool::new(false),
+            );
+            done += 1;
+            if started.elapsed() >= budget {
+                break;
+            }
+        }
+        done
     }
 
     pub(crate) fn same_owner(&self, other: &Self) -> bool {

@@ -183,6 +183,8 @@ pub(super) fn record_shadowmap_draws<'a>(
     let mut bound_epoch = None;
     let mut bound_depth = None;
     let mut constants_bound = false;
+    let mut textures_bound = false;
+    let mut bound_texture_group = None;
     let mut indexed = 0u32;
     for draw in draws {
         let Some(gpu_pipeline) = registry.ready(draw.pipeline) else {
@@ -245,9 +247,15 @@ pub(super) fn record_shadowmap_draws<'a>(
         }
         if !constants_bound {
             pass.set_bind_group(0, constants_bind, &[]);
-            pass.set_bind_group(1, textures_bind, &[]);
             constants_bound = true;
             record_n.group0 = record_n.group0.saturating_add(1);
+        }
+        let own_textures = draw.texture_bind.as_ref();
+        let own_id = own_textures.map(|group| group.id());
+        if !textures_bound || (own_id.is_some() && own_id != bound_texture_group) {
+            pass.set_bind_group(1, own_textures.unwrap_or(textures_bind), &[]);
+            textures_bound = true;
+            bound_texture_group = own_id;
             record_n.group1 = record_n.group1.saturating_add(1);
         }
         pass.draw_indexed(
