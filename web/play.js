@@ -1,7 +1,7 @@
 Error.stackTraceLimit = 80;
 import { enableTouch, setTouchMode } from "./touch.js";
 import { Host, Guest, describePath } from "./rtc.js";
-import init, { mount_shard, run, run_map, net_open, net_close, net_message, net_tick, net_host, net_join_first, net_start, audio_tick, audio_pull, persist_dump, persist_load } from "./pkg/iw4l_web.js";
+import init, { mount_shard, run, run_map, net_open, net_close, net_message, net_tick, net_host, net_join_first, net_start, audio_tick, set_shadows, audio_pull, persist_dump, persist_load } from "./pkg/iw4l_web.js";
 
 const GAME_DIR = "Call of Duty Modern Warfare 2";
 const $ = (id) => document.getElementById(id);
@@ -79,6 +79,7 @@ async function start() {
   $("mp-slot").appendChild($("mp"));
   $("iw4l-canvas").focus();
   enableTouch({ force: params.has("touch") });
+  if (params.has("noshadow")) set_shadows(false);
   if (params.has("launch")) run_map(params.get("launch")); else run();
 }
 

@@ -94,6 +94,12 @@ mod entry {
         let _ = vfs::write(path, bytes);
     }
 
+    /// Debug: draw without sun/spot shadows (call before the engine starts).
+    #[wasm_bindgen]
+    pub fn set_shadows(on: bool) {
+        d3d9_sm3::set_shadows(on);
+    }
+
     /// Step the audio control loop and prepare queued clips (called from the page timer).
     #[wasm_bindgen]
     pub fn audio_tick() {

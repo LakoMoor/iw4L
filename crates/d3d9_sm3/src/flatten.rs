@@ -13,6 +13,14 @@ use alloc::{
     vec::Vec,
 };
 
+static SHADOWS: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(true);
+
+/// Debug switch for A/B comparisons: with shadows off every comparison reads "lit".
+/// Takes effect for programs flattened after the call.
+pub fn set_shadows(on: bool) {
+    SHADOWS.store(on, core::sync::atomic::Ordering::Relaxed);
+}
+
 const TABLES: [&str; 4] = [
     "dx_textures_2d",
     "dx_textures_cube",
@@ -182,7 +190,16 @@ pub fn flatten_texture_tables(wgsl: &str) -> String {
                 binding + 1
             ));
         }
-        for register in &shadow_registers {
+        let shadows = SHADOWS.load(core::sync::atomic::Ordering::Relaxed);
+        for register in shadow_registers.iter().filter(|_| !shadows) {
+            declarations.push_str(&format!(
+                "fn sm3_shadow_compare_s{register}(uv: vec2<f32>, z: f32) -> f32 {{
+    return 1.0;
+}}
+"
+            ));
+        }
+        for register in shadow_registers.iter().filter(|_| shadows) {
             declarations.push_str(&format!(
                 "fn sm3_shadow_compare_s{register}(uv: vec2<f32>, z: f32) -> f32 {{
     let size = vec2<f32>(textureDimensions(sm3_tex_s{register}));

@@ -20,6 +20,7 @@ vfs = { path = "../vfs" }
 sim = { path = "../sim" }
 net = { path = "../net" }
 audio = { path = "../audio" }
+d3d9_sm3 = { path = "../d3d9_sm3" }
 
 [lints]
 workspace = true
